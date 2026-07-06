@@ -3,6 +3,10 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Customers from "./pages/Customers";
 import Quotes from "./pages/Quotes";
+import Finance from "./pages/Finance";
+import Stock from "./pages/Stock";
+import Production from "./pages/Production";
+import Purchases from "./pages/Purchases";
 import Sidebar from "./components/Sidebar";
 
 function App() {
@@ -17,6 +21,10 @@ function App() {
         {activePage === "İş Takibi" && <Jobs />}
         {activePage === "Müşteriler" && <Customers />}
         {activePage === "Teklifler" && <Quotes />}
+        {activePage === "Finans" && <Finance />}
+        {activePage === "Stok" && <Stock />}
+        {activePage === "Üretim" && <Production />}
+        {activePage === "Satın Alma" && <Purchases />}
       </main>
     </div>
   );
