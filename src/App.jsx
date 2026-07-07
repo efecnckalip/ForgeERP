@@ -2,6 +2,7 @@ import { useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
+import Quotes from "./pages/Quotes";
 
 function PlaceholderPage({ title }) {
   return (
@@ -32,7 +33,7 @@ export default function App() {
         return <PlaceholderPage title="Müşteriler" />;
 
       case "Teklifler":
-        return <PlaceholderPage title="Teklifler" />;
+        return <Quotes />;
 
       case "Satın Alma":
         return <PlaceholderPage title="Satın Alma" />;
