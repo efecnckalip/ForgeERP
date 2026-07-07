@@ -1,254 +1,234 @@
-function Dashboard() {
-  return (
-    <div style={styles.page}>
-      <h1 style={styles.title}>Dashboard</h1>
-      <p style={styles.subtitle}>Atölyenin genel durumunu buradan takip et.</p>
+import { useMemo, useState } from "react";
+import {
+  Activity,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  X,
+  Factory,
+  CalendarDays,
+} from "lucide-react";
 
-      <div style={styles.statsGrid}>
-        <Stat title="Aktif İş" value="24" color="#2563eb" />
-        <Stat title="Üretimde" value="8" color="#16a34a" />
-        <Stat title="Bu Hafta Bitecek" value="5" color="#f59e0b" />
-        <Stat title="Bekleyen Tahsilat" value="267.000 ₺" color="#7c3aed" />
+const STORAGE_KEY = "forge_jobs";
+
+export default function Dashboard() {
+  const [selectedType, setSelectedType] = useState(null);
+
+  const jobs = useMemo(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  }, []);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const lists = {
+    active: jobs.filter((j) => j.status !== "Tamamlandı"),
+    waiting: jobs.filter((j) => j.status === "Bekliyor"),
+    delayed: jobs.filter(
+      (j) => j.deadline && j.deadline < today && j.status !== "Tamamlandı"
+    ),
+    completed: jobs.filter((j) => j.status === "Tamamlandı"),
+  };
+
+  const selectedJobs = selectedType ? lists[selectedType.key] : [];
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-8">
+      <div className="mb-8">
+        <div className="inline-flex rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-bold text-blue-600 shadow-sm">
+          ForgeERP by EFE CNC
+        </div>
+
+        <h1 className="mt-3 text-3xl font-black text-slate-950">
+          Dashboard
+        </h1>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Atölye üretim durumu ve genel iş takibi.
+        </p>
       </div>
 
-      <div style={styles.mainGrid}>
-        <section style={styles.panel}>
-          <h2 style={styles.panelTitle}>Aylık İş & Tahsilat Grafiği</h2>
-          <div style={styles.fakeChart}>
-            <div style={styles.lineBlue}></div>
-            <div style={styles.lineGreen}></div>
-          </div>
-        </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Aktif İş"
+          value={lists.active.length}
+          note="Devam eden işler"
+          icon={<Activity size={22} />}
+          onClick={() => setSelectedType({ key: "active", title: "Aktif İşler" })}
+        />
 
-        <section style={styles.panel}>
-          <h2 style={styles.panelTitle}>İş Durum Dağılımı</h2>
+        <StatCard
+          title="Bekleyen İş"
+          value={lists.waiting.length}
+          note="Başlamayı bekleyen işler"
+          icon={<Clock size={22} />}
+          onClick={() =>
+            setSelectedType({ key: "waiting", title: "Bekleyen İşler" })
+          }
+        />
 
-          <div style={styles.statusRow}>
-            <div style={styles.circle}>
-              <strong>24</strong>
-              <span>Toplam İş</span>
-            </div>
+        <StatCard
+          title="Geciken İş"
+          value={lists.delayed.length}
+          note="Termin geçmiş işler"
+          icon={<AlertTriangle size={22} />}
+          onClick={() =>
+            setSelectedType({ key: "delayed", title: "Geciken İşler" })
+          }
+        />
 
-            <div style={styles.statusList}>
-              <p><b style={{ color: "#ef4444" }}>●</b> Geciken <strong>4</strong></p>
-              <p><b style={{ color: "#3b82f6" }}>●</b> Üretimde <strong>8</strong></p>
-              <p><b style={{ color: "#f59e0b" }}>●</b> Bu Hafta <strong>5</strong></p>
-            </div>
-          </div>
-        </section>
-
-        <section style={styles.panel}>
-          <h2 style={styles.panelTitle}>Finansal Özet</h2>
-          <Box title="Toplam İş" value="363.000 ₺" />
-          <Box title="Tahsil Edilen" value="96.000 ₺" green />
-          <Box title="Bekleyen" value="267.000 ₺" orange />
-        </section>
+        <StatCard
+          title="Tamamlanan"
+          value={lists.completed.length}
+          note="Kapanmış işler"
+          icon={<CheckCircle2 size={22} />}
+          onClick={() =>
+            setSelectedType({ key: "completed", title: "Tamamlanan İşler" })
+          }
+        />
       </div>
 
-      <section style={styles.tablePanel}>
-        <h2 style={styles.panelTitle}>Acil / Yakın İşler</h2>
+      <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-black text-slate-950">
+          Genel Durum
+        </h2>
 
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th>İş No</th>
-              <th>Müşteri</th>
-              <th>İş</th>
-              <th>Durum</th>
-              <th>Teslim</th>
-              <th>Tutar</th>
-              <th>Öncelik</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>EFE-26-001</td>
-              <td>DEMKA</td>
-              <td>Dövme Kalıbı</td>
-              <td>CNC</td>
-              <td>12.07.2026</td>
-              <td>185.000 ₺</td>
-              <td>Acil</td>
-            </tr>
-            <tr>
-              <td>EFE-26-002</td>
-              <td>FORMELL</td>
-              <td>Melamin Kalıbı</td>
-              <td>CAM</td>
-              <td>15.07.2026</td>
-              <td>82.000 ₺</td>
-              <td>Yüksek</td>
-            </tr>
-            <tr>
-              <td>EFE-26-003</td>
-              <td>KÜTAHYA PORSELEN</td>
-              <td>Porselen Kalıp</td>
-              <td>Tasarım</td>
-              <td>18.07.2026</td>
-              <td>96.000 ₺</td>
-              <td>Orta</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
+        <p className="mt-2 text-sm text-slate-500">
+          Üretim sayfasına iş ekledikçe buradaki kartlar otomatik güncellenir.
+          Kartlara tıklayınca ilgili işler listelenir.
+        </p>
+      </div>
+
+      {selectedType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-950">
+                  {selectedType.title}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Toplam {selectedJobs.length} iş bulundu.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedType(null)}
+                className="rounded-2xl bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {selectedJobs.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-slate-400">
+                Bu grupta iş yok kanka.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                {selectedJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-black text-blue-600">
+                          {job.code}
+                        </p>
+
+                        <h3 className="mt-1 text-lg font-black text-slate-950">
+                          {job.part}
+                        </h3>
+
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {job.customer}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">
+                        {job.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <InfoBox
+                        icon={<Factory size={15} />}
+                        label="Makine"
+                        value={job.machine}
+                      />
+
+                      <InfoBox
+                        icon={<CalendarDays size={15} />}
+                        label="Termin"
+                        value={job.deadline}
+                      />
+
+                      <InfoBox
+                        label="Öncelik"
+                        value={job.priority}
+                      />
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-500">İlerleme</span>
+                        <span className="text-slate-900">%{job.progress}</span>
+                      </div>
+
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-blue-600"
+                          style={{ width: `${job.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Stat({ title, value, color }) {
+function StatCard({ title, value, note, icon, onClick }) {
   return (
-    <div style={styles.statCard}>
-      <p style={styles.statTitle}>{title}</p>
-      <h2 style={styles.statValue}>{value}</h2>
-      <div style={{ ...styles.glow, background: color }} />
-    </div>
+    <button
+      onClick={onClick}
+      className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-500">{title}</p>
+          <h3 className="mt-3 text-3xl font-black text-slate-950">
+            {value}
+          </h3>
+        </div>
+
+        <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+          {icon}
+        </div>
+      </div>
+
+      <p className="mt-4 text-xs font-semibold text-slate-400">{note}</p>
+    </button>
   );
 }
 
-function Box({ title, value, green, orange }) {
+function InfoBox({ icon, label, value }) {
   return (
-    <div style={styles.box}>
-      <p style={styles.boxTitle}>{title}</p>
-      <h3
-        style={{
-          ...styles.boxValue,
-          color: green ? "#22c55e" : orange ? "#f59e0b" : "white",
-        }}
-      >
-        {value}
-      </h3>
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <p className="flex items-center gap-2 text-xs font-bold text-slate-400">
+        {icon}
+        {label}
+      </p>
+
+      <p className="mt-1 text-sm font-black text-slate-800">
+        {value || "-"}
+      </p>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    padding: "40px",
-    color: "white",
-  },
-  title: {
-    fontSize: "34px",
-    margin: 0,
-  },
-  subtitle: {
-    color: "#94a3b8",
-    marginTop: "8px",
-  },
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: "18px",
-    marginTop: "30px",
-  },
-  statCard: {
-    position: "relative",
-    overflow: "hidden",
-    background: "#0f172a",
-    border: "1px solid #1e293b",
-    borderRadius: "20px",
-    padding: "24px",
-    minHeight: "120px",
-  },
-  statTitle: {
-    color: "#93c5fd",
-    margin: 0,
-  },
-  statValue: {
-    fontSize: "32px",
-    margin: "12px 0 0",
-  },
-  glow: {
-    position: "absolute",
-    right: "-30px",
-    bottom: "-30px",
-    width: "100px",
-    height: "100px",
-    borderRadius: "50%",
-    opacity: 0.35,
-  },
-  mainGrid: {
-    display: "grid",
-    gridTemplateColumns: "2fr 1.5fr 1fr",
-    gap: "18px",
-    marginTop: "18px",
-  },
-  panel: {
-    background: "#0f172a",
-    border: "1px solid #1e293b",
-    borderRadius: "20px",
-    padding: "22px",
-  },
-  panelTitle: {
-    margin: "0 0 18px",
-    fontSize: "20px",
-  },
-  fakeChart: {
-    height: "180px",
-    position: "relative",
-    borderTop: "1px solid #1e293b",
-  },
-  lineBlue: {
-    position: "absolute",
-    left: "40px",
-    right: "30px",
-    top: "70px",
-    height: "3px",
-    background: "#3b82f6",
-    borderRadius: "20px",
-  },
-  lineGreen: {
-    position: "absolute",
-    left: "40px",
-    right: "30px",
-    top: "115px",
-    height: "3px",
-    background: "#22c55e",
-    borderRadius: "20px",
-  },
-  statusRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "30px",
-  },
-  circle: {
-    width: "120px",
-    height: "120px",
-    borderRadius: "50%",
-    background: "#2563eb",
-    display: "grid",
-    placeItems: "center",
-    textAlign: "center",
-  },
-  statusList: {
-    lineHeight: "2",
-    flex: 1,
-  },
-  box: {
-    background: "#111827",
-    border: "1px solid #1e293b",
-    borderRadius: "16px",
-    padding: "18px",
-    marginBottom: "12px",
-  },
-  boxTitle: {
-    color: "#93c5fd",
-    margin: 0,
-  },
-  boxValue: {
-    margin: "8px 0 0",
-    fontSize: "22px",
-  },
-  tablePanel: {
-    marginTop: "18px",
-    background: "#0f172a",
-    border: "1px solid #1e293b",
-    borderRadius: "20px",
-    padding: "22px",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-};
-
-export default Dashboard;

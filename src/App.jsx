@@ -1,45 +1,66 @@
 import { useState } from "react";
+import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
-import Customers from "./pages/Customers";
-import Quotes from "./pages/Quotes";
-import Finance from "./pages/Finance";
-import Stock from "./pages/Stock";
-import Production from "./pages/Production";
-import Purchases from "./pages/Purchases";
-import Sidebar from "./components/Sidebar";
 
-function App() {
-  const [activePage, setActivePage] = useState("Dashboard");
-
+function PlaceholderPage({ title }) {
   return (
-    <div style={styles.layout}>
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
-
-      <main style={styles.content}>
-        {activePage === "Dashboard" && <Dashboard />}
-        {activePage === "İş Takibi" && <Jobs />}
-        {activePage === "Müşteriler" && <Customers />}
-        {activePage === "Teklifler" && <Quotes />}
-        {activePage === "Finans" && <Finance />}
-        {activePage === "Stok" && <Stock />}
-        {activePage === "Üretim" && <Production />}
-        {activePage === "Satın Alma" && <Purchases />}
-      </main>
+    <div className="p-8">
+      <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-8">
+        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+        <p className="text-slate-500 mt-2">
+          Bu sayfa light/pro temaya sırayla geçirilecek.
+        </p>
+      </div>
     </div>
   );
 }
 
-const styles = {
-  layout: {
-    display: "flex",
-    minHeight: "100vh",
-    background: "#020617",
-  },
-  content: {
-    flex: 1,
-    overflow: "auto",
-  },
-};
+export default function App() {
+  const [activePage, setActivePage] = useState("Dashboard");
 
-export default App;
+  const renderPage = () => {
+    switch (activePage) {
+      case "Dashboard":
+        return <Dashboard />;
+
+      case "İş Takibi":
+      case "Üretim":
+        return <Jobs />;
+
+      case "Müşteriler":
+        return <PlaceholderPage title="Müşteriler" />;
+
+      case "Teklifler":
+        return <PlaceholderPage title="Teklifler" />;
+
+      case "Satın Alma":
+        return <PlaceholderPage title="Satın Alma" />;
+
+      case "Finans":
+        return <PlaceholderPage title="Finans" />;
+
+      case "Stok":
+        return <PlaceholderPage title="Stok" />;
+
+      case "Makineler":
+        return <PlaceholderPage title="Makineler" />;
+
+      case "Ayarlar":
+        return <PlaceholderPage title="Ayarlar" />;
+
+      default:
+        return <Dashboard />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex">
+      <Sidebar activePage={activePage} setActivePage={setActivePage} />
+
+      <main className="flex-1 min-h-screen overflow-y-auto">
+        {renderPage()}
+      </main>
+    </div>
+  );
+}
