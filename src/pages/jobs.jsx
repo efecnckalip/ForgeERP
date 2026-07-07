@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { printDeliveryNoteDocument } from "../services/documentService";
 
 const STORAGE_KEY = "forge_jobs";
 
@@ -23,6 +24,23 @@ const statusLine = {
   completed: "bg-slate-400",
 };
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getPeriod(date = new Date()) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function periodLabel(period) {
+  const [year, month] = period.split("-");
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString(
+    "tr-TR",
+    { month: "long", year: "numeric" }
+  );
+}
+
 function money(value) {
   return Number(value || 0).toLocaleString("tr-TR", {
     style: "currency",
@@ -33,10 +51,6 @@ function money(value) {
 
 function safe(v) {
   return v || "—";
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function createJobNo() {
@@ -65,6 +79,7 @@ function normalizeStatus(status) {
 
 function normalizeJob(job) {
   const rawId = job.id || job.jobNo || crypto.randomUUID();
+  const createdAt = job.createdAt || todayISO();
 
   return {
     ...job,
@@ -79,13 +94,15 @@ function normalizeJob(job) {
     material: job.material || job.materialName,
     materialType: job.materialType || job.materialOwner || job.materialSource,
     deadline: job.deadline || "",
-    createdAt: job.createdAt || todayISO(),
+    createdAt,
+    period: job.period || getPeriod(createdAt),
   };
 }
 
 export default function Jobs() {
   const [jobs, setJobs] = useState([]);
   const [filter, setFilter] = useState("all");
+  const [selectedPeriod, setSelectedPeriod] = useState(getPeriod());
   const [selectedJob, setSelectedJob] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -100,35 +117,52 @@ export default function Jobs() {
   });
 
   useEffect(() => {
-    setJobs(getStoredJobs().map(normalizeJob));
+    const loaded = getStoredJobs().map(normalizeJob);
+    setJobs(loaded);
+    saveStoredJobs(loaded);
   }, []);
+
+  const periods = useMemo(() => {
+    const list = [...new Set(jobs.map((job) => job.period || getPeriod(job.createdAt)))];
+    if (!list.includes(getPeriod())) list.unshift(getPeriod());
+    return list.sort().reverse();
+  }, [jobs]);
+
+  const periodJobs = useMemo(() => {
+    return jobs.filter((job) => (job.period || getPeriod(job.createdAt)) === selectedPeriod);
+  }, [jobs, selectedPeriod]);
 
   const stats = useMemo(
     () => ({
-      all: jobs.length,
-      active: jobs.filter((j) => j.status === "active").length,
-      waiting: jobs.filter((j) => j.status === "waiting").length,
-      production: jobs.filter((j) => j.status === "production").length,
-      delayed: jobs.filter(
+      all: periodJobs.length,
+      active: periodJobs.filter((j) => j.status === "active").length,
+      waiting: periodJobs.filter((j) => j.status === "waiting").length,
+      production: periodJobs.filter((j) => j.status === "production").length,
+      delayed: periodJobs.filter(
         (j) => j.deadline && j.deadline < todayISO() && j.status !== "completed"
       ).length,
-      completed: jobs.filter((j) => j.status === "completed").length,
+      completed: periodJobs.filter((j) => j.status === "completed").length,
+      totalAmount: periodJobs.reduce((sum, job) => sum + Number(job.quoteTotal || 0), 0),
     }),
-    [jobs]
+    [periodJobs]
   );
 
   const filteredJobs = useMemo(() => {
-    if (filter === "all") return jobs;
+    if (filter === "all") return periodJobs;
+
     if (filter === "delayed") {
-      return jobs.filter(
+      return periodJobs.filter(
         (j) => j.deadline && j.deadline < todayISO() && j.status !== "completed"
       );
     }
-    return jobs.filter((j) => j.status === filter);
-  }, [jobs, filter]);
+
+    return periodJobs.filter((j) => j.status === filter);
+  }, [periodJobs, filter]);
 
   function handleCreateJob(e) {
     e.preventDefault();
+
+    const createdAt = todayISO();
 
     const newJob = normalizeJob({
       id: crypto.randomUUID(),
@@ -144,13 +178,15 @@ export default function Jobs() {
       materialType: form.materialType,
       source: "manual",
       quoteType: "Manuel İş",
-      createdAt: todayISO(),
+      createdAt,
+      period: getPeriod(createdAt),
     });
 
     const updatedJobs = [newJob, ...jobs];
 
     setJobs(updatedJobs);
     saveStoredJobs(updatedJobs);
+    setSelectedPeriod(newJob.period);
     setSelectedJob(newJob);
     setShowModal(false);
 
@@ -190,7 +226,7 @@ export default function Jobs() {
   }
 
   const detailJob =
-    selectedJob && jobs.some((job) => job.id === selectedJob.id)
+    selectedJob && filteredJobs.some((job) => job.id === selectedJob.id)
       ? selectedJob
       : filteredJobs[0];
 
@@ -200,7 +236,7 @@ export default function Jobs() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">İş Takibi</h1>
           <p className="text-sm text-slate-500">
-            Tekliften işe çevrilen işler, üretim durumu ve teklif detayları
+            Döneme göre iş takibi, üretim durumu ve teklif detayları
           </p>
         </div>
 
@@ -210,6 +246,34 @@ export default function Jobs() {
         >
           + Yeni İş
         </button>
+      </div>
+
+      <div className="mb-6 bg-white border border-slate-200 rounded-3xl shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold text-slate-400">AKTİF DÖNEM</p>
+          <h2 className="text-xl font-black text-slate-900 mt-1">
+            {periodLabel(selectedPeriod)}
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Bu dönemde {stats.all} iş, toplam {money(stats.totalAmount)}
+          </p>
+        </div>
+
+        <select
+          value={selectedPeriod}
+          onChange={(e) => {
+            setSelectedPeriod(e.target.value);
+            setSelectedJob(null);
+            setFilter("all");
+          }}
+          className="h-11 min-w-[210px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none"
+        >
+          {periods.map((period) => (
+            <option key={period} value={period}>
+              {periodLabel(period)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
@@ -227,7 +291,7 @@ export default function Jobs() {
             <div>
               <h2 className="font-semibold text-slate-900">İş Listesi</h2>
               <p className="text-xs text-slate-400 mt-1">
-                {filteredJobs.length} kayıt listeleniyor
+                {periodLabel(selectedPeriod)} içinde {filteredJobs.length} kayıt listeleniyor
               </p>
             </div>
 
@@ -247,7 +311,7 @@ export default function Jobs() {
 
           {filteredJobs.length === 0 ? (
             <div className="p-12 text-center text-slate-400">
-              Bu filtrede iş bulunamadı.
+              Bu dönemde bu filtreye uygun iş bulunamadı.
             </div>
           ) : (
             <div className="p-4 space-y-4">
@@ -273,6 +337,10 @@ export default function Jobs() {
                         <span className={`text-xs px-2.5 py-1 rounded-full border ${statusStyles[job.status]}`}>
                           {statusLabels[job.status]}
                         </span>
+
+                        <span className="text-xs px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-500">
+                          {periodLabel(job.period)}
+                        </span>
                       </div>
 
                       <h3 className="font-bold text-slate-900 text-base truncate">
@@ -287,7 +355,7 @@ export default function Jobs() {
                       </p>
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
-                        <MiniInfo label="Teklif No" value={safe(job.quoteNo)} />
+                        <MiniInfo label="Açılış" value={safe(job.createdAt)} />
                         <MiniInfo label="Tutar" value={money(job.quoteTotal)} strong />
                         <MiniInfo label="Malzeme" value={safe(job.material)} />
                         <MiniInfo label="Tip" value={safe(job.materialType)} />
@@ -339,7 +407,7 @@ export default function Jobs() {
                   Manuel İş Oluştur
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Teklifsiz gelen işleri buradan üretime al.
+                  Yeni iş bugünün dönemine otomatik kaydedilir.
                 </p>
               </div>
 
@@ -416,6 +484,7 @@ export default function Jobs() {
           outline: none;
           background: white;
         }
+
         .input:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
@@ -481,6 +550,8 @@ function JobDetail({ job }) {
         <Row label="İş No" value={safe(job.jobNo)} />
         <Row label="Müşteri" value={safe(job.customer)} />
         <Row label="Durum" value={safe(statusLabels[job.status])} />
+        <Row label="Açılış Tarihi" value={safe(job.createdAt)} />
+        <Row label="Dönem" value={periodLabel(job.period)} />
         <Row label="Teslim Tarihi" value={safe(job.deadline)} />
 
         <div className="pt-5 mt-5 border-t border-slate-100">
@@ -490,6 +561,19 @@ function JobDetail({ job }) {
           <Row label="Teklif Türü" value={safe(job.quoteType)} />
           <Row label="Malzeme" value={safe(job.material)} />
           <Row label="Malzeme Tipi" value={safe(job.materialType)} />
+        </div>
+
+        <div className="pt-5 mt-5 border-t border-slate-100">
+          <h3 className="font-semibold text-slate-900 mb-4">Belgeler</h3>
+
+          <div className="grid gap-3">
+            <button
+              onClick={() => printDeliveryNoteDocument(job)}
+              className="h-11 rounded-2xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition"
+            >
+              🚚 Sevk Formu / İrsaliye Yazdır
+            </button>
+          </div>
         </div>
       </div>
     </div>

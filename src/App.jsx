@@ -3,6 +3,8 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Quotes from "./pages/Quotes";
+import Customers from "./pages/Customers";
+import Machines from "./pages/Machines";
 
 function PlaceholderPage({ title }) {
   return (
@@ -26,14 +28,19 @@ export default function App() {
         return <Dashboard />;
 
       case "İş Takibi":
+        return <Jobs />;
+
       case "Üretim":
         return <Jobs />;
 
       case "Müşteriler":
-        return <PlaceholderPage title="Müşteriler" />;
+        return <Customers />;
 
       case "Teklifler":
         return <Quotes />;
+
+      case "Makineler":
+        return <Machines />;
 
       case "Satın Alma":
         return <PlaceholderPage title="Satın Alma" />;
@@ -43,9 +50,6 @@ export default function App() {
 
       case "Stok":
         return <PlaceholderPage title="Stok" />;
-
-      case "Makineler":
-        return <PlaceholderPage title="Makineler" />;
 
       case "Ayarlar":
         return <PlaceholderPage title="Ayarlar" />;
