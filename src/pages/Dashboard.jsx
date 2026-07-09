@@ -1,796 +1,561 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
-  BarChart3,
-  Briefcase,
+  ArrowRight,
+  Bell,
+  BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
+  CircleDollarSign,
   Clock,
-  Factory,
   FileText,
-  Timer,
-  TrendingUp,
+  Plus,
+  ShoppingCart,
   Wallet,
+  Wrench,
+  BarChart3,
   Zap,
 } from "lucide-react";
-import { getJobs, getQuotes, getActivePeriod } from "../utils/storage";
-import { getCurrentPeriod } from "../utils/period";
 
-const MACHINE_KEY = "forgeerp_machines";
+const today = new Date();
+const todayISO = today.toISOString().slice(0, 10);
 
-const statusLabels = {
-  active: "Aktif",
-  waiting: "Bekleyen",
-  production: "Üretimde",
-  quality: "Kalite",
-  ready: "Hazır",
-  delivered: "Teslim",
-  completed: "Tamamlanan",
+const readLS = (key, fallback = []) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
 };
 
-const statusColors = {
-  active: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  waiting: "bg-amber-50 text-amber-700 border-amber-200",
-  production: "bg-blue-50 text-blue-700 border-blue-200",
-  quality: "bg-violet-50 text-violet-700 border-violet-200",
-  ready: "bg-cyan-50 text-cyan-700 border-cyan-200",
-  delivered: "bg-slate-100 text-slate-700 border-slate-200",
-  completed: "bg-slate-100 text-slate-700 border-slate-200",
-};
-
-const machineStatusLabels = {
-  idle: "Boş",
-  production: "Üretimde",
-  maintenance: "Bakımda",
-  passive: "Pasif",
-};
-
-function safe(value) {
-  return value || "—";
-}
-
-function money(value) {
-  return Number(value || 0).toLocaleString("tr-TR", {
+const money = (v) =>
+  new Intl.NumberFormat("tr-TR", {
     style: "currency",
     currency: "TRY",
     maximumFractionDigits: 0,
+  }).format(Number(v || 0));
+
+const isToday = (d) => d && String(d).slice(0, 10) === todayISO;
+const isPast = (d) => d && String(d).slice(0, 10) < todayISO;
+
+export default function Dashboard({ setActivePage }) {
+  const [calendarMode, setCalendarMode] = useState("Hafta");
+  const [rates, setRates] = useState({
+    loading: true,
+    usd: null,
+    eur: null,
+    gold: null,
   });
-}
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dateText(date) {
-  return date.toLocaleDateString("tr-TR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function timeText(date) {
-  return date.toLocaleTimeString("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function normalizeStatus(status) {
-  const s = String(status || "").toLowerCase();
-
-  if (s.includes("üret") || s.includes("production")) return "production";
-  if (s.includes("kalite") || s.includes("quality")) return "quality";
-  if (s.includes("hazır") || s.includes("ready")) return "ready";
-  if (s.includes("teslim") || s.includes("delivered")) return "delivered";
-  if (s.includes("tamam") || s.includes("completed")) return "completed";
-  if (s.includes("bek") || s.includes("waiting")) return "waiting";
-  if (s.includes("aktif") || s.includes("active")) return "active";
-
-  return "active";
-}
-
-function normalizeJob(job) {
-  const id = job.id || job.jobNo || crypto.randomUUID();
-
-  return {
-    ...job,
-    id,
-    jobNo: job.jobNo || id,
-    title:
-      job.title ||
-      job.jobName ||
-      job.part ||
-      job.partName ||
-      job.productName ||
-      "İsimsiz İş",
-    customer: job.customer || job.customerName || "Müşteri Yok",
-    status: normalizeStatus(job.status),
-    quoteTotal: job.quoteTotal || job.price || job.totalPrice || job.amount || 0,
-    deadline: job.deadline || job.dueDate || "",
-    progress: Number(job.progress || 0),
-    machineName: job.machineName || job.machine || "",
-    operator: job.operator || "",
-    createdAt: job.createdAt || "",
+  const go = (page) => {
+    if (typeof setActivePage === "function") setActivePage(page);
   };
-}
-
-function readMachines() {
-  try {
-    return JSON.parse(localStorage.getItem(MACHINE_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function quoteAmount(quote) {
-  return Number(quote?.totals?.grandTotal || quote?.quoteTotal || quote?.price || 0);
-}
-
-export default function Dashboard() {
-  const [now, setNow] = useState(new Date());
-  const [jobs, setJobs] = useState([]);
-  const [quotes, setQuotes] = useState([]);
-  const [machines, setMachines] = useState([]);
-  const [selectedList, setSelectedList] = useState(null);
-  const [selectedJob, setSelectedJob] = useState(null);
-
-  const activePeriod = getActivePeriod(getCurrentPeriod());
-
-  function refreshData() {
-    setJobs(getJobs().map(normalizeJob).filter((job) => job.id));
-    setQuotes(getQuotes());
-    setMachines(readMachines());
-  }
 
   useEffect(() => {
-    refreshData();
+    async function loadRates() {
+      try {
+        const fxRes = await fetch("https://open.er-api.com/v6/latest/USD");
+        const fx = await fxRes.json();
 
-    const refreshEvents = [
-      "storage",
-      "forgeerp:jobs-updated",
-      "forgeerp:quotes-updated",
-      "forgeerp:machines-updated",
-      "forgeerp:schedule-updated",
-    ];
+        let goldValue = null;
+        try {
+          const goldRes = await fetch("https://api.genelpara.com/embed/altin.json");
+          const gold = await goldRes.json();
+          goldValue = gold?.GA?.satis || gold?.ALTIN?.satis || null;
+        } catch {
+          goldValue = null;
+        }
 
-    refreshEvents.forEach((eventName) => window.addEventListener(eventName, refreshData));
+        setRates({
+          loading: false,
+          usd: fx?.rates?.TRY || null,
+          eur: fx?.rates?.TRY && fx?.rates?.EUR ? fx.rates.TRY / fx.rates.EUR : null,
+          gold: goldValue,
+        });
+      } catch {
+        setRates({ loading: false, usd: null, eur: null, gold: null });
+      }
+    }
 
-    return () => {
-      refreshEvents.forEach((eventName) => window.removeEventListener(eventName, refreshData));
-    };
+    loadRates();
   }, []);
 
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const periodJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      if (!activePeriod?.periodKey) return true;
-
-      if (job.periodKey) {
-        return job.periodKey === activePeriod.periodKey;
-      }
-
-      if (job.createdAt) {
-        return String(job.createdAt).slice(0, 7) === activePeriod.periodKey;
-      }
-
-      return false;
+  const data = useMemo(() => {
+    const jobs = readLS("forge_jobs", []);
+    const quotes = readLS("forge_quotes", []);
+    const purchases = readLS("forge_purchases", []);
+    const customers = readLS("forge_customers", []);
+    const finance = readLS("forge_finance", {
+      cash: 0,
+      receivables: [],
+      payables: [],
     });
-  }, [jobs, activePeriod]);
-
-  const periodQuotes = useMemo(() => {
-    return quotes.filter((quote) => {
-      if (!activePeriod?.periodKey) return true;
-
-      if (quote.periodKey) {
-        return quote.periodKey === activePeriod.periodKey;
-      }
-
-      if (quote.createdAt) {
-        return String(quote.createdAt).slice(0, 7) === activePeriod.periodKey;
-      }
-
-      return false;
-    });
-  }, [quotes, activePeriod]);
-
-  const today = todayISO();
-
-  const lists = useMemo(() => {
-    const active = periodJobs.filter((job) => job.status === "active");
-    const waiting = periodJobs.filter((job) => job.status === "waiting");
-    const production = periodJobs.filter((job) => job.status === "production");
-    const quality = periodJobs.filter((job) => job.status === "quality");
-    const completed = periodJobs.filter(
-      (job) => job.status === "completed" || job.status === "delivered"
-    );
-    const delayed = periodJobs.filter(
-      (job) => job.deadline && job.deadline < today && !["completed", "delivered"].includes(job.status)
-    );
-    const todayDelivery = periodJobs.filter(
-      (job) => job.deadline === today && job.status !== "completed"
-    );
-
-    return { active, waiting, production, quality, completed, delayed, todayDelivery };
-  }, [periodJobs, today]);
-
-  const metrics = useMemo(() => {
-    const quoteTotal = periodQuotes.reduce((sum, quote) => sum + quoteAmount(quote), 0);
-    const jobTotal = periodJobs.reduce((sum, job) => sum + Number(job.quoteTotal || 0), 0);
-    const convertedQuotes = periodQuotes.filter((quote) => quote.status === "İşe Çevrildi");
-    const productionMachines = machines.filter((machine) => machine.status === "production").length;
-    const machineOccupancy = machines.length
-      ? Math.round((productionMachines / machines.length) * 100)
-      : 0;
 
     return {
-      quoteTotal,
-      jobTotal,
-      convertedQuoteCount: convertedQuotes.length,
-      machineOccupancy,
-      productionMachines,
-      idleMachines: machines.filter((machine) => machine.status === "idle").length,
-      maintenanceMachines: machines.filter((machine) => machine.status === "maintenance").length,
+      jobs: Array.isArray(jobs) ? jobs : [],
+      quotes: Array.isArray(quotes) ? quotes : [],
+      purchases: Array.isArray(purchases) ? purchases : [],
+      customers: Array.isArray(customers) ? customers : [],
+      finance: finance || {},
     };
-  }, [periodQuotes, periodJobs, machines]);
+  }, []);
 
-  const activities = useMemo(() => {
-    const jobActivities = periodJobs.slice(0, 4).map((job) => ({
-      id: `job-${job.id}`,
-      time: job.createdAt,
-      title: "İş oluşturuldu",
-      desc: `${safe(job.jobNo)} • ${safe(job.customer)}`,
-    }));
+  const stats = useMemo(() => {
+    const receivables = data.finance.receivables || [];
+    const payables = data.finance.payables || [];
 
-    const quoteActivities = periodQuotes.slice(0, 4).map((quote) => ({
-      id: `quote-${quote.id}`,
-      time: quote.createdAt,
-      title: "Teklif kaydedildi",
-      desc: `${safe(quote.id)} • ${safe(quote.customer)}`,
-    }));
+    const activeJobs = data.jobs.filter((j) => j.status !== "Tamamlandı");
+    const waitingJobs = data.jobs.filter((j) => j.status === "Bekliyor");
+    const delayedJobs = data.jobs.filter(
+      (j) => isPast(j.deadline || j.deliveryDate) && j.status !== "Tamamlandı"
+    );
+    const todayJobs = data.jobs.filter((j) => isToday(j.deadline || j.deliveryDate));
 
-    return [...jobActivities, ...quoteActivities]
-      .sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0))
-      .slice(0, 6);
-  }, [periodJobs, periodQuotes]);
+    const pendingQuotes = data.quotes.filter(
+      (q) => q.status === "Bekliyor" || q.status === "Taslak"
+    );
+    const approvalQuotes = data.quotes.filter(
+      (q) => q.status === "Onay Bekliyor" || q.status === "Müşteri Onayı"
+    );
+    const monthQuoteTotal = data.quotes
+      .filter((q) => String(q.date || q.createdAt || "").slice(0, 7) === todayISO.slice(0, 7))
+      .reduce((s, q) => s + Number(q.total || q.amount || q.price || 0), 0);
 
-  const maxChart = Math.max(
-    lists.active.length,
-    lists.waiting.length,
-    lists.production.length,
-    lists.quality.length,
-    lists.completed.length,
-    1
-  );
+    const waitingPurchases = data.purchases.filter(
+      (p) => p.status === "Bekliyor" || p.status === "Sipariş"
+    );
+    const notReceived = data.purchases.filter(
+      (p) => p.received === false || p.status === "Teslim Alınmadı"
+    );
+    const nearDue = data.purchases.filter((p) => isToday(p.dueDate || p.paymentDate));
 
-  const selectedJobs = selectedList ? lists[selectedList.key] || [] : [];
+    const todayReceivable = receivables
+      .filter((x) => isToday(x.dueDate || x.date))
+      .reduce((s, x) => s + Number(x.amount || x.total || 0), 0);
+
+    const todayPayable = payables
+      .filter((x) => isToday(x.dueDate || x.date))
+      .reduce((s, x) => s + Number(x.amount || x.total || 0), 0);
+
+    const overdueReceivables = receivables.filter(
+      (x) => isPast(x.dueDate || x.date) && x.status !== "Ödendi"
+    );
+    const overduePayables = payables.filter(
+      (x) => isPast(x.dueDate || x.date) && x.status !== "Ödendi"
+    );
+
+    return {
+      activeJobs,
+      waitingJobs,
+      delayedJobs,
+      todayJobs,
+      pendingQuotes,
+      approvalQuotes,
+      monthQuoteTotal,
+      waitingPurchases,
+      notReceived,
+      nearDue,
+      todayReceivable,
+      todayPayable,
+      overdueReceivables,
+      overduePayables,
+      overdueReceivableTotal: overdueReceivables.reduce(
+        (s, x) => s + Number(x.amount || x.total || 0),
+        0
+      ),
+      overduePayableTotal: overduePayables.reduce(
+        (s, x) => s + Number(x.amount || x.total || 0),
+        0
+      ),
+      cash: Number(data.finance.cash || data.finance.balance || 0),
+    };
+  }, [data]);
+
+  const recent = [
+    ...data.quotes.slice(-3).map((x) => ({
+      type: "Teklifler",
+      text: `Teklif kaydı - ${x.quoteNo || x.customer || "Yeni teklif"}`,
+      page: "Teklifler",
+    })),
+    ...data.purchases.slice(-3).map((x) => ({
+      type: "Satın Alma",
+      text: `Satın alma kaydı - ${x.supplier || x.name || "Yeni sipariş"}`,
+      page: "Satın Alma",
+    })),
+    ...data.jobs.slice(-3).map((x) => ({
+      type: "İş Takibi",
+      text: `İş kaydı - ${x.jobNo || x.name || "Yeni iş"}`,
+      page: "İş Takibi",
+    })),
+  ].slice(-7).reverse();
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
-      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <div className="min-h-screen bg-[#f7f9fc] p-5 text-slate-900">
+      <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <div className="inline-flex rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-black text-blue-600 shadow-sm">
-            ForgeERP by EFE CNC
-          </div>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
-            Dashboard
-          </h1>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
-            Atölye kontrol merkezi, canlı üretim, teklif dönüşleri ve risk takibi.
+          <h1 className="text-3xl font-black tracking-tight">Merhaba, Yasin 👋</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            ForgeERP kontrol merkezi, tüm süreçlerin tek ekranında.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <TopInfo title="Aktif Dönem" value={activePeriod?.label || "Bu Ay"} />
-          <TopInfo title={dateText(now)} value={timeText(now)} dark />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs font-black">
+              CANLI KURLAR <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-5 text-sm">
+              <Rate label="USD/TRY" value={rates.usd} loading={rates.loading} />
+              <Rate label="EUR/TRY" value={rates.eur} loading={rates.loading} />
+              <Rate label="ALTIN/GR" value={rates.gold} loading={rates.loading} />
+            </div>
+          </div>
+
+          <button onClick={() => go("Risk")} className="relative rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <Bell size={20} />
+            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-black text-white">
+              3
+            </span>
+          </button>
+
+          <button
+            onClick={() => go("Dashboard")}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center shadow-sm"
+          >
+            <p className="text-xs font-bold text-slate-500">9 Temmuz 2026</p>
+            <p className="text-xs text-slate-500">Çarşamba</p>
+            <p className="mt-1 text-xl font-black">14:30:25</p>
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="mb-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_2fr] xl:items-center">
-          <div>
-            <p className="text-sm font-black text-slate-400">Bugünün Özeti</p>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-              Merhaba Yasin
-            </h2>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
-              {lists.waiting.length} iş başlamayı bekliyor, {lists.production.length} iş üretimde, {lists.delayed.length} iş riskte.
-            </p>
+      <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <TopCard title="Bugün Bize Ödenecekler" value={money(stats.todayReceivable)} sub="Tahsilat" icon={CircleDollarSign} color="green" onClick={() => go("Finans")} />
+        <TopCard title="Bugün Bizim Ödeyeceklerimiz" value={money(stats.todayPayable)} sub="Ödeme" icon={Wallet} color="blue" onClick={() => go("Finans")} />
+        <TopCard title="Vadesi Geçen Tahsilatlar" value={money(stats.overdueReceivableTotal)} sub={`${stats.overdueReceivables.length} tahsilat`} icon={AlertTriangle} color="red" onClick={() => go("Finans")} />
+        <TopCard title="Vadesi Geçen Borçlar" value={money(stats.overduePayableTotal)} sub={`${stats.overduePayables.length} borç`} icon={AlertTriangle} color="orange" onClick={() => go("Finans")} />
+        <TopCard title="Güncel Kasa Bakiyesi" value={money(stats.cash)} sub="Kasa bakiyesi" icon={Wallet} color="purple" onClick={() => go("Finans")} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 xl:col-span-5">
+          <ModuleCard
+            title="Üretim"
+            icon={BriefcaseBusiness}
+            button="Üretime Git"
+            onClick={() => go("Üretim")}
+            rows={[
+              ["Aktif İşler", stats.activeJobs.length, "green"],
+              ["Bekleyen İşler", stats.waitingJobs.length, "orange"],
+              ["Geciken İşler", stats.delayedJobs.length, "red"],
+              ["Bugün Teslim Edilecek", stats.todayJobs.length, "blue"],
+            ]}
+          />
+
+          <ModuleCard
+            title="Teklifler"
+            icon={FileText}
+            button="Tekliflere Git"
+            onClick={() => go("Teklifler")}
+            rows={[
+              ["Bekleyen Teklifler", stats.pendingQuotes.length, "blue"],
+              ["Onay Bekleyen Teklifler", stats.approvalQuotes.length, "orange"],
+              ["Bu Ay Teklif Tutarı", money(stats.monthQuoteTotal), "gray"],
+            ]}
+          />
+
+          <ModuleCard
+            title="Satın Alma"
+            icon={ShoppingCart}
+            button="Satın Almalara Git"
+            onClick={() => go("Satın Alma")}
+            rows={[
+              ["Bekleyen Satın Almalar", stats.waitingPurchases.length, "purple"],
+              ["Teslim Alınmayan Siparişler", stats.notReceived.length, "orange"],
+              ["Yaklaşan Vadeler", stats.nearDue.length, "red"],
+            ]}
+          />
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-black text-blue-700">İş Takvimi</h2>
+            <div className="flex gap-2">
+              {["Gün", "Hafta", "Ay", "Ajanda"].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setCalendarMode(m)}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    calendarMode === m
+                      ? "bg-blue-600 text-white"
+                      : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <HeroMini title="Bugün Teslim" value={lists.todayDelivery.length} icon={<CalendarDays size={18} />} />
-            <HeroMini title="Geciken" value={lists.delayed.length} icon={<AlertTriangle size={18} />} danger />
-            <HeroMini title="Makine Doluluk" value={`%${metrics.machineOccupancy}`} icon={<Factory size={18} />} />
-            <HeroMini title="Bu Ay Ciro" value={money(metrics.jobTotal)} icon={<Wallet size={18} />} />
+          <CalendarMock onClick={() => go("İş Takibi")} />
+
+          <div className="mt-4 flex flex-wrap justify-center gap-5 text-xs font-bold text-slate-500">
+            <Legend color="bg-emerald-500" text="Aktif İş" />
+            <Legend color="bg-amber-500" text="Bekleyen İş" />
+            <Legend color="bg-red-500" text="Geciken İş" />
+            <Legend color="bg-blue-500" text="Bugün Teslim" />
+            <Legend color="bg-purple-500" text="Tamamlanan İş" />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard title="Aktif İş" value={lists.active.length} note="Devam eden işler" icon={<Activity size={20} />} onClick={() => setSelectedList({ key: "active", title: "Aktif İşler" })} />
-        <MetricCard title="Bekleyen" value={lists.waiting.length} note="Başlamayı bekleyen" icon={<Clock size={20} />} onClick={() => setSelectedList({ key: "waiting", title: "Bekleyen İşler" })} />
-        <MetricCard title="Üretimde" value={lists.production.length} note="Makinedeki işler" icon={<Factory size={20} />} onClick={() => setSelectedList({ key: "production", title: "Üretimdeki İşler" })} />
-        <MetricCard title="Teklif" value={periodQuotes.length} note={money(metrics.quoteTotal)} icon={<FileText size={20} />} onClick={() => setSelectedList({ key: "quotes", title: "Bu Dönem Teklifler" })} />
-        <MetricCard title="Makine" value={`%${metrics.machineOccupancy}`} note={`${metrics.productionMachines} üretimde`} icon={<Zap size={20} />} />
-        <MetricCard title="Risk" value={lists.delayed.length} note="Geciken işler" icon={<AlertTriangle size={20} />} danger onClick={() => setSelectedList({ key: "delayed", title: "Riskteki İşler" })} />
-      </div>
+      <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-4 text-lg font-black text-blue-700">Hızlı Erişim</h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <Quick title="Yeni İş" sub="İş Takibi" onClick={() => go("İş Takibi")} />
+          <Quick title="Yeni Teklif" sub="Teklifler" onClick={() => go("Teklifler")} />
+          <Quick title="Yeni Müşteri" sub="Müşteriler" onClick={() => go("Müşteriler")} />
+          <Quick title="Tahsilat Ekle" sub="Finans" onClick={() => go("Finans")} />
+          <Quick title="Makine Bakım" sub="Makineler" onClick={() => go("Makineler")} />
+          <Quick title="Üretim Planı" sub="Üretim" onClick={() => go("Üretim")} />
+        </div>
+      </section>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr_1fr]">
-        <Panel title="Dönem Özeti" icon={<Wallet size={18} />}>
-          <SummaryRow label="Bu Dönem İş" value={periodJobs.length} />
-          <SummaryRow label="Bu Dönem Teklif" value={periodQuotes.length} />
-          <SummaryRow label="İşe Çevrilen Teklif" value={metrics.convertedQuoteCount} />
-          <SummaryRow label="Teklif Toplamı" value={money(metrics.quoteTotal)} />
-          <SummaryRow label="İşe Dönüşen Tutar" value={money(metrics.jobTotal)} />
-        </Panel>
-
-        <Panel title="İş Durum Grafiği" icon={<BarChart3 size={18} />}>
-          <ChartBar label="Aktif" value={lists.active.length} max={maxChart} />
-          <ChartBar label="Bekleyen" value={lists.waiting.length} max={maxChart} />
-          <ChartBar label="Üretimde" value={lists.production.length} max={maxChart} />
-          <ChartBar label="Kalite" value={lists.quality.length} max={maxChart} />
-          <ChartBar label="Tamamlanan" value={lists.completed.length} max={maxChart} />
-        </Panel>
-
-        <Panel title="Risk & Takip" icon={<TrendingUp size={18} />}>
-          <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-white p-3 text-amber-600">
-                <AlertTriangle size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-black text-amber-700">Geciken İş</p>
-                <p className="text-3xl font-black text-amber-900">{lists.delayed.length}</p>
-              </div>
-            </div>
+      <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <BottomCard title="Son Hareketler" className="xl:col-span-3">
+          <div className="space-y-3">
+            {(recent.length ? recent : [{ text: "Henüz hareket yok", type: "ERP", page: "Dashboard" }]).map((r, i) => (
+              <button key={i} onClick={() => go(r.page)} className="flex w-full items-center gap-3 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-blue-50">
+                <div className="rounded-xl bg-white p-2 text-blue-600">
+                  <Clock size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-black">{r.text}</p>
+                  <p className="text-xs text-slate-500">{r.type}</p>
+                </div>
+                <ArrowRight size={15} />
+              </button>
+            ))}
           </div>
-          <p className="mt-3 text-sm font-semibold text-slate-500">
-            {lists.waiting.length > 0
-              ? `${lists.waiting.length} iş başlamayı bekliyor. Sıradaki adım üretime alma veya makine ataması.`
-              : "Bekleyen iş yok. Atölye akışı temiz görünüyor."}
-          </p>
-        </Panel>
-      </div>
+        </BottomCard>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr]">
-        <Panel title="Makine Parkı" icon={<Factory size={18} />}>
-          {machines.length === 0 ? (
-            <EmptyText text="Henüz makine tanımlanmadı. Makineler sayfasından makine ekleyince burada canlı görünecek." />
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {machines.slice(0, 6).map((machine) => (
-                <MachineCard key={machine.id} machine={machine} />
-              ))}
+        <BottomCard title="İş Durumu Özeti" className="xl:col-span-3">
+          <button onClick={() => go("İş Takibi")} className="flex w-full items-center justify-center gap-7">
+            <div className="flex h-32 w-32 items-center justify-center rounded-full border-[16px] border-emerald-500">
+              <div className="text-center">
+                <p className="text-2xl font-black">{data.jobs.length}</p>
+                <p className="text-xs font-bold text-slate-500">Toplam İş</p>
+              </div>
             </div>
-          )}
-        </Panel>
-
-        <Panel title="Son Hareketler" icon={<Timer size={18} />}>
-          {activities.length === 0 ? (
-            <EmptyText text="Henüz aktivite yok." />
-          ) : (
-            <div className="space-y-3">
-              {activities.map((activity) => (
-                <ActivityRow key={activity.id} activity={activity} />
-              ))}
+            <div className="space-y-3 text-sm">
+              <SummaryDot color="bg-emerald-500" label="Aktif" value={stats.activeJobs.length} />
+              <SummaryDot color="bg-amber-500" label="Bekleyen" value={stats.waitingJobs.length} />
+              <SummaryDot color="bg-red-500" label="Geciken" value={stats.delayedJobs.length} />
+              <SummaryDot color="bg-slate-400" label="Tamamlanan" value="0" />
             </div>
-          )}
-        </Panel>
-      </div>
+          </button>
+        </BottomCard>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Son İşler" icon={<Briefcase size={18} />}>
-          {periodJobs.length === 0 ? (
-            <EmptyText text="Bu dönemde henüz iş kaydı yok." />
-          ) : (
-            <div className="space-y-3">
-              {periodJobs.slice(0, 5).map((job) => (
-                <JobLine key={job.id} job={job} onClick={() => setSelectedJob(job)} />
-              ))}
-            </div>
-          )}
-        </Panel>
+        <BottomCard title="Finans Durum Grafiği (Bu Ay)" className="xl:col-span-3">
+          <button onClick={() => go("Finans")} className="flex h-44 w-full items-end gap-2">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="flex flex-1 items-end gap-1">
+                <div className="w-full rounded-t bg-emerald-400" style={{ height: `${25 + ((i * 17) % 90)}px` }} />
+                <div className="w-full rounded-t bg-red-400" style={{ height: `${10 + ((i * 9) % 50)}px` }} />
+              </div>
+            ))}
+          </button>
+        </BottomCard>
 
-        <Panel title="Son Teklifler" icon={<FileText size={18} />}>
-          {periodQuotes.length === 0 ? (
-            <EmptyText text="Bu dönemde henüz teklif kaydı yok." />
-          ) : (
-            <div className="space-y-3">
-              {periodQuotes.slice(0, 5).map((quote) => (
-                <QuoteLine key={quote.id} quote={quote} />
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+        <BottomCard title="Yaklaşan Vadeler" className="xl:col-span-2">
+          <Due onClick={() => go("Finans")} name="ABC Ltd. - Tahsilat" amount="₺75.000" date="10 Temmuz" />
+          <Due onClick={() => go("Finans")} name="XYZ A.Ş. - Ödeme" amount="₺45.000" date="11 Temmuz" />
+          <Due onClick={() => go("Finans")} name="DEF Makina - Ödeme" amount="₺60.000" date="12 Temmuz" />
+        </BottomCard>
 
-      <div className="mt-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-black text-slate-950">Genel Durum</h2>
-        <p className="mt-2 text-sm font-semibold text-slate-500">
-          {lists.waiting.length > 0
-            ? `${lists.waiting.length} iş başlamayı bekliyor. Sıradaki adım üretime alma veya makine ataması.`
-            : "Sistem dengeli çalışıyor. Yeni teklif veya üretim planlaması bekleniyor."}
-        </p>
-      </div>
+        <BottomCard title="Risk & Takip" className="xl:col-span-1">
+          <Risk onClick={() => go("İş Takibi")} text="Geciken İşler" value={stats.delayedJobs.length} />
+          <Risk onClick={() => go("Finans")} text="Geciken Tahsilatlar" value={stats.overdueReceivables.length} />
+          <Risk onClick={() => go("Finans")} text="Geciken Borçlar" value={stats.overduePayables.length} />
+          <Risk onClick={() => go("Satın Alma")} text="Bakım Yaklaşan" value="0" />
+        </BottomCard>
+      </section>
 
-      {selectedList && selectedList.key !== "quotes" && (
-        <JobModal
-          title={selectedList.title}
-          jobs={selectedJobs}
-          onClose={() => setSelectedList(null)}
-          onSelect={(job) => setSelectedJob(job)}
-        />
-      )}
-
-      {selectedList?.key === "quotes" && (
-        <QuoteModal
-          title={selectedList.title}
-          quotes={periodQuotes}
-          onClose={() => setSelectedList(null)}
-        />
-      )}
-
-      {selectedJob && (
-        <JobDetailModal
-          job={selectedJob}
-          onClose={() => setSelectedJob(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function TopInfo({ title, value, dark }) {
-  return (
-    <div
-      className={`rounded-3xl border p-4 shadow-sm ${
-        dark
-          ? "border-slate-900 bg-slate-900 text-white"
-          : "border-slate-200 bg-white text-slate-900"
-      }`}
-    >
-      <p className={`text-xs font-black ${dark ? "text-slate-300" : "text-slate-400"}`}>
-        {title}
+      <p className="py-5 text-center text-xs font-semibold text-slate-400">
+        ForgeERP by EFE CNC - Enterprise Resource Planning System
       </p>
-      <p className="mt-1 text-lg font-black">{value}</p>
     </div>
   );
 }
 
-function HeroMini({ title, value, icon, danger }) {
+function Rate({ label, value, loading }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-center gap-3">
-        <div className={`rounded-2xl p-3 ${danger ? "bg-red-50 text-red-600" : "bg-white text-blue-600"}`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-xs font-black text-slate-400">{title}</p>
-          <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({ title, value, note, icon, danger, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-3xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-        danger ? "border-red-100" : "border-slate-200"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-black text-slate-500">{title}</p>
-          <h3 className="mt-2 text-2xl font-black text-slate-950">{value}</h3>
-        </div>
-        <div className={`rounded-2xl p-3 ${danger ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}>
-          {icon}
-        </div>
-      </div>
-      <p className="mt-3 text-xs font-semibold text-slate-400">{note}</p>
+    <button className="text-left">
+      <p className="text-xs font-bold text-slate-500">{label}</p>
+      <p className="font-black">
+        {loading ? "..." : value ? Number(value).toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : "Bağlantı yok"}
+      </p>
+      <p className="text-xs font-bold text-emerald-500">Canlı</p>
     </button>
   );
 }
 
-function Panel({ title, icon, children }) {
+function TopCard({ title, value, sub, icon: Icon, color, onClick }) {
+  const colors = {
+    green: "bg-emerald-100 text-emerald-600",
+    blue: "bg-blue-100 text-blue-600",
+    red: "bg-red-100 text-red-600",
+    orange: "bg-orange-100 text-orange-600",
+    purple: "bg-purple-100 text-purple-600",
+  };
+
   return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-lg font-black text-slate-950">{title}</h2>
-        <div className="rounded-2xl bg-slate-50 p-2 text-slate-500">{icon}</div>
+    <button onClick={onClick} className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+      <div className={`mb-4 inline-flex rounded-2xl p-3 ${colors[color]}`}>
+        <Icon size={22} />
       </div>
-      {children}
+      <p className="text-xs font-black uppercase text-slate-500">{title}</p>
+      <h3 className="mt-2 text-2xl font-black">{value}</h3>
+      <p className="mt-1 text-sm font-semibold text-slate-500">{sub}</p>
+    </button>
+  );
+}
+
+function ModuleCard({ title, icon: Icon, rows, button, onClick }) {
+  const dot = {
+    green: "bg-emerald-500",
+    orange: "bg-amber-500",
+    red: "bg-red-500",
+    blue: "bg-blue-500",
+    purple: "bg-purple-500",
+    gray: "bg-slate-400",
+  };
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+        <Icon className="text-blue-600" size={22} />
+        <h2 className="text-lg font-black">{title}</h2>
+      </div>
+
+      <div className="space-y-5">
+        {rows.map(([label, value, color]) => (
+          <button key={label} onClick={onClick} className="flex w-full items-center justify-between rounded-xl text-left transition hover:bg-slate-50">
+            <div className="flex items-center gap-3">
+              <span className={`h-3 w-3 rounded-full ${dot[color]}`} />
+              <p className="text-sm font-bold">{label}</p>
+            </div>
+            <p className="font-black">{value}</p>
+          </button>
+        ))}
+      </div>
+
+      <button onClick={onClick} className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 py-3 text-sm font-black text-blue-600 transition hover:bg-blue-600 hover:text-white">
+        {button} <ArrowRight size={16} />
+      </button>
     </div>
   );
 }
 
-function SummaryRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between border-b border-slate-100 py-3 text-sm">
-      <span className="font-semibold text-slate-500">{label}</span>
-      <strong className="text-slate-950">{value}</strong>
-    </div>
-  );
-}
-
-function ChartBar({ label, value, max }) {
-  const width = Math.max(6, (value / max) * 100);
-
-  return (
-    <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between text-sm">
-        <span className="font-black text-slate-600">{label}</span>
-        <span className="font-black text-slate-950">{value}</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-slate-900" style={{ width: `${width}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function MachineCard({ machine }) {
-  const production = machine.status === "production";
-  const maintenance = machine.status === "maintenance";
+function CalendarMock({ onClick }) {
+  const days = ["Pzt 6", "Sal 7", "Çar 8", "Per 9", "Cum 10", "Cmt 11", "Paz 12"];
+  const jobs = [
+    ["ABC Otomotiv", "08:30 - 11:00", "bg-emerald-100 border-emerald-300", 1, 1],
+    ["XYZ Ltd.", "10:00 - 12:00", "bg-amber-100 border-amber-300", 2, 2],
+    ["DEF Makina", "10:00 - 13:00", "bg-purple-100 border-purple-300", 3, 2],
+    ["GHI Kalıp", "14:00 - 17:30", "bg-red-100 border-red-300", 3, 5],
+    ["JKL Otomotiv", "09:30 - 12:30", "bg-blue-100 border-blue-300", 4, 2],
+    ["MNO Ltd.", "12:30 - 16:30", "bg-emerald-100 border-emerald-300", 5, 4],
+  ];
 
   return (
-    <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-black text-slate-950">{safe(machine.name)}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{safe(machine.type)}</p>
-        </div>
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-black ${
-            production
-              ? "border-blue-200 bg-blue-50 text-blue-700"
-              : maintenance
-              ? "border-amber-200 bg-amber-50 text-amber-700"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700"
-          }`}
-        >
-          {machineStatusLabels[machine.status] || safe(machine.status)}
-        </span>
+    <button onClick={onClick} className="w-full overflow-hidden rounded-2xl border border-slate-200 text-left">
+      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+        {days.map((d) => (
+          <div key={d} className="border-r border-slate-200 p-3 text-center text-xs font-black last:border-r-0">{d}</div>
+        ))}
       </div>
 
-      {production ? (
-        <div className="mt-4 rounded-2xl bg-white p-3">
-          <p className="text-xs font-black text-slate-400">Çalışan İş</p>
-          <p className="mt-1 font-black text-slate-900">{safe(machine.activeJobNo)}</p>
-          <p className="text-xs font-semibold text-slate-500">{safe(machine.activeJobTitle)}</p>
-        </div>
-      ) : (
-        <p className="mt-4 text-sm font-semibold text-slate-500">
-          {maintenance ? "Bakım / kontrol sürecinde." : "Makine boşta veya plan bekliyor."}
-        </p>
-      )}
-    </div>
-  );
-}
+      <div className="relative grid h-[210px] grid-cols-7 bg-white">
+        {days.map((d) => (
+          <div key={d} className="border-r border-slate-100 last:border-r-0" />
+        ))}
 
-function ActivityRow({ activity }) {
-  const time = activity.time
-    ? new Date(activity.time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
-    : "—";
-
-  return (
-    <div className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-      <div className="rounded-xl bg-white px-2 py-1 text-xs font-black text-slate-500">
-        {time}
-      </div>
-      <div>
-        <p className="font-black text-slate-900">{activity.title}</p>
-        <p className="text-sm font-semibold text-slate-500">{activity.desc}</p>
-      </div>
-    </div>
-  );
-}
-
-function JobLine({ job, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black text-blue-600">{safe(job.jobNo)}</p>
-          <p className="mt-1 font-black text-slate-950">{safe(job.title)}</p>
-          <p className="text-sm font-semibold text-slate-500">{safe(job.customer)}</p>
-        </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusColors[job.status]}`}>
-          {statusLabels[job.status] || safe(job.status)}
-        </span>
+        {jobs.map(([name, hour, cls, col, row], i) => (
+          <div key={i} className={`absolute rounded-xl border p-2 text-[11px] font-bold ${cls}`} style={{ left: `${((col - 1) / 7) * 100 + 1}%`, top: `${row * 31}px`, width: "12.2%" }}>
+            <p>İş-2026-{1025 + i}</p>
+            <p>{name}</p>
+            <p className="text-slate-500">{hour}</p>
+          </div>
+        ))}
       </div>
     </button>
   );
 }
 
-function QuoteLine({ quote }) {
+function Legend({ color, text }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black text-blue-600">{safe(quote.id)}</p>
-          <p className="mt-1 font-black text-slate-950">{safe(quote.title)}</p>
-          <p className="text-sm font-semibold text-slate-500">{safe(quote.customer)}</p>
-        </div>
-        <p className="font-black text-slate-950">{money(quoteAmount(quote))}</p>
-      </div>
-    </div>
-  );
-}
-
-function EmptyText({ text }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-400">
+    <div className="flex items-center gap-2">
+      <span className={`h-2 w-2 rounded-full ${color}`} />
       {text}
     </div>
   );
 }
 
-function JobModal({ title, jobs, onClose, onSelect }) {
+function Quick({ title, sub, onClick }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-start justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">{title}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Toplam {jobs.length} iş bulundu.</p>
-          </div>
-          <button onClick={onClose} className="rounded-2xl bg-slate-100 px-3 py-2 font-black text-slate-500 hover:bg-slate-200">×</button>
-        </div>
-
-        {jobs.length === 0 ? (
-          <EmptyText text="Bu grupta iş yok." />
-        ) : (
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-2">
-            {jobs.map((job) => <JobLine key={job.id} job={job} onClick={() => onSelect?.(job)} />)}
-          </div>
-        )}
+    <button onClick={onClick} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="rounded-xl bg-blue-50 p-2 text-blue-600">
+        <Plus size={18} />
       </div>
+      <div>
+        <p className="text-sm font-black text-blue-700">{title}</p>
+        <p className="text-xs text-slate-500">{sub}</p>
+      </div>
+    </button>
+  );
+}
+
+function BottomCard({ title, children, className = "" }) {
+  return (
+    <div className={`rounded-3xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+      <h2 className="mb-4 text-lg font-black">{title}</h2>
+      {children}
     </div>
   );
 }
 
-
-function JobDetailModal({ job, onClose }) {
-  const operations = Array.isArray(job.operations) ? job.operations : [];
-  const createdDate = job.createdAt
-    ? new Date(job.createdAt).toLocaleDateString("tr-TR")
-    : "—";
-
+function SummaryDot({ color, label, value }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-start justify-between border-b border-slate-100 pb-4">
-          <div>
-            <p className="text-xs font-black text-slate-400">İŞ DETAYI</p>
-            <h2 className="mt-1 text-2xl font-black text-slate-950">
-              {safe(job.jobNo)}
-            </h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">
-              {safe(job.title)} • {safe(job.customer)}
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="rounded-2xl bg-slate-100 px-3 py-2 font-black text-slate-500 hover:bg-slate-200"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <DetailBox label="Durum" value={statusLabels[job.status] || safe(job.status)} />
-          <DetailBox label="Teklif No" value={safe(job.quoteNo)} />
-          <DetailBox label="Tutar" value={money(job.quoteTotal)} />
-          <DetailBox label="Makine" value={safe(job.machineName)} />
-          <DetailBox label="Operatör" value={safe(job.operator)} />
-          <DetailBox label="Termin" value={safe(job.deadline)} />
-          <DetailBox label="Malzeme" value={safe(job.material)} />
-          <DetailBox label="Malzeme Tipi" value={safe(job.materialType)} />
-          <DetailBox label="Oluşturma" value={createdDate} />
-        </div>
-
-        <div className="mt-5 rounded-3xl border border-slate-100 bg-slate-50 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-black text-slate-950">Operasyonlar</h3>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500">
-              {operations.length} operasyon
-            </span>
-          </div>
-
-          {operations.length === 0 ? (
-            <EmptyText text="Bu işte operasyon kaydı yok." />
-          ) : (
-            <div className="space-y-2">
-              {operations.map((op, index) => (
-                <div
-                  key={`${op.name}-${index}`}
-                  className="grid grid-cols-1 gap-2 rounded-2xl bg-white p-3 text-sm md:grid-cols-[1.3fr_1fr_0.7fr_0.8fr]"
-                >
-                  <div>
-                    <p className="text-xs font-black text-slate-400">Operasyon</p>
-                    <p className="font-black text-slate-900">{safe(op.name)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-400">Makine</p>
-                    <p className="font-black text-slate-900">{safe(op.machine)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-400">Saat</p>
-                    <p className="font-black text-slate-900">{safe(op.hours)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-400">Saatlik</p>
-                    <p className="font-black text-slate-900">{money(op.hourlyRate)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5">
-          <div className="mb-2 flex items-center justify-between text-xs font-black">
-            <span className="text-slate-500">İlerleme</span>
-            <span className="text-slate-900">%{Number(job.progress || 0)}</span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-slate-900"
-              style={{ width: `${Number(job.progress || 0)}%` }}
-            />
-          </div>
-        </div>
+    <div className="flex items-center justify-between gap-8">
+      <div className="flex items-center gap-2">
+        <span className={`h-3 w-3 rounded-full ${color}`} />
+        <span className="font-bold text-slate-600">{label}</span>
       </div>
+      <span className="font-black">{value}</span>
     </div>
   );
 }
 
-function DetailBox({ label, value }) {
+function Due({ name, amount, date, onClick }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-      <p className="text-xs font-black text-slate-400">{label}</p>
-      <p className="mt-1 font-black text-slate-950">{value}</p>
-    </div>
+    <button onClick={onClick} className="mb-3 w-full rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-blue-50">
+      <p className="text-xs font-black">{name}</p>
+      <div className="mt-1 flex justify-between text-xs font-bold text-slate-500">
+        <span>{amount}</span>
+        <span>{date}</span>
+      </div>
+    </button>
   );
 }
 
-
-function QuoteModal({ title, quotes, onClose }) {
+function Risk({ text, value, onClick }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-start justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">{title}</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Toplam {quotes.length} teklif bulundu.</p>
-          </div>
-          <button onClick={onClose} className="rounded-2xl bg-slate-100 px-3 py-2 font-black text-slate-500 hover:bg-slate-200">×</button>
-        </div>
-
-        {quotes.length === 0 ? (
-          <EmptyText text="Bu dönemde teklif yok." />
-        ) : (
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-2">
-            {quotes.map((quote) => <QuoteLine key={quote.id} quote={quote} />)}
-          </div>
-        )}
-      </div>
-    </div>
+    <button onClick={onClick} className="mb-3 flex w-full items-center justify-between rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-red-50">
+      <p className="text-xs font-black">{text}</p>
+      <span className="font-black text-red-600">{value}</span>
+    </button>
   );
 }

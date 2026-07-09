@@ -1,5 +1,36 @@
-// ForgeERP Document Engine 1.1
-// Teklif PDF + Sevk İrsaliyesi
+// ForgeERP Document Engine 2.0
+// Quote + Premium Delivery Note
+
+const COMPANY_STORAGE_KEY = "forge_company_profile";
+
+const DEFAULT_COMPANY = {
+  name: "Firma Ünvanı",
+  subtitle: "ForgeERP by EFE CNC",
+  slogan: "Kalıp • CNC İşleme • Tersine Mühendislik • Kalite Kontrol",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  taxOffice: "",
+  taxNumber: "",
+  mersisNo: "",
+  iban: "",
+  logoUrl: "",
+  footer: "Bu belge ForgeERP Document Engine 2.0 ile oluşturulmuştur.",
+};
+
+function getCompanyProfile() {
+  try {
+    const saved = localStorage.getItem(COMPANY_STORAGE_KEY);
+    return saved ? { ...DEFAULT_COMPANY, ...JSON.parse(saved) } : DEFAULT_COMPANY;
+  } catch {
+    return DEFAULT_COMPANY;
+  }
+}
+
+function safe(value) {
+  return value === undefined || value === null || value === "" ? "—" : value;
+}
 
 function money(value) {
   return `${Number(value || 0).toLocaleString("tr-TR", {
@@ -7,12 +38,12 @@ function money(value) {
   })} ₺`;
 }
 
-function safe(value) {
-  return value || "—";
-}
-
 function today() {
   return new Date().toLocaleDateString("tr-TR");
+}
+
+function docNo(prefix, value) {
+  return value || `${prefix}-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
 }
 
 function openDocument(html) {
@@ -29,34 +60,69 @@ function openDocument(html) {
   setTimeout(() => {
     win.focus();
     win.print();
-  }, 300);
+  }, 350);
 }
 
 function baseStyle() {
   return `
     <style>
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
       body {
         margin: 0;
         padding: 24px;
-        font-family: Arial, sans-serif;
-        color: #0f172a;
-        background: white;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #111827;
+        background: #f3f4f6;
       }
 
       .page {
-        max-width: 794px;
+        width: 794px;
+        min-height: 1123px;
         margin: 0 auto;
+        background: white;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: 0 25px 80px rgba(15, 23, 42, 0.14);
       }
 
-      .header {
+      .top {
+        background: #0f172a;
+        color: white;
+        padding: 28px;
+        display: grid;
+        grid-template-columns: 1.3fr 0.8fr;
+        gap: 24px;
+      }
+
+      .brand {
         display: flex;
-        justify-content: space-between;
-        gap: 20px;
-        border-bottom: 2px solid #0f172a;
-        padding-bottom: 16px;
-        margin-bottom: 18px;
+        gap: 16px;
+        align-items: center;
+      }
+
+      .logo {
+        width: 86px;
+        height: 86px;
+        border-radius: 22px;
+        border: 1px solid rgba(255,255,255,0.18);
+        background: rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        color: rgba(255,255,255,0.45);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 8px;
       }
 
       .brand h1 {
@@ -66,240 +132,358 @@ function baseStyle() {
       }
 
       .brand p {
-        margin: 4px 0 0;
-        color: #64748b;
+        margin: 5px 0 0;
+        color: rgba(255,255,255,0.72);
         font-size: 12px;
+        line-height: 1.35;
       }
 
       .doc-title {
         text-align: right;
       }
 
+      .doc-title .engine {
+        font-size: 10px;
+        color: rgba(255,255,255,0.45);
+        letter-spacing: 0.14em;
+        font-weight: 800;
+      }
+
       .doc-title h2 {
-        margin: 0;
-        font-size: 22px;
+        margin: 7px 0 10px;
+        font-size: 30px;
+        letter-spacing: -0.06em;
       }
 
       .doc-title p {
-        margin: 5px 0 0;
-        color: #64748b;
+        margin: 5px 0;
         font-size: 12px;
+        color: rgba(255,255,255,0.75);
       }
 
-      .grid {
+      .content {
+        padding: 28px;
+      }
+
+      .grid-2 {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 14px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
       }
 
       .card {
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 16px;
+        background: #fff;
+      }
+
+      .soft {
+        background: #f9fafb;
       }
 
       .card h3 {
-        margin: 0 0 10px;
-        font-size: 12px;
+        margin: 0 0 12px;
+        font-size: 11px;
         text-transform: uppercase;
-        color: #334155;
-        letter-spacing: 0.04em;
+        color: #6b7280;
+        letter-spacing: 0.08em;
       }
 
       .row {
         display: flex;
         justify-content: space-between;
         gap: 14px;
-        padding: 6px 0;
+        padding: 7px 0;
         border-bottom: 1px solid #f1f5f9;
         font-size: 12px;
       }
 
+      .row:last-child {
+        border-bottom: 0;
+      }
+
       .row span {
-        color: #64748b;
+        color: #6b7280;
       }
 
       .row b {
         text-align: right;
+        color: #111827;
       }
 
       table {
         width: 100%;
         border-collapse: collapse;
+        margin-top: 14px;
         font-size: 12px;
+        overflow: hidden;
+        border-radius: 16px;
       }
 
       th {
-        background: #f8fafc;
-        color: #64748b;
+        background: #0f172a;
+        color: white;
         text-align: left;
-        padding: 9px;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 11px;
+        padding: 11px 10px;
+        font-size: 10px;
         text-transform: uppercase;
+        letter-spacing: 0.06em;
       }
 
       td {
-        padding: 9px;
-        border-bottom: 1px solid #e2e8f0;
+        padding: 11px 10px;
+        border-bottom: 1px solid #e5e7eb;
+        vertical-align: top;
+      }
+
+      tbody tr:nth-child(even) {
+        background: #f9fafb;
       }
 
       .summary {
-        width: 300px;
+        width: 320px;
         margin-left: auto;
-        margin-top: 12px;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 14px;
+        margin-top: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 18px;
+        padding: 16px;
+        background: #f9fafb;
       }
 
       .summary .grand {
         margin-top: 8px;
-        padding-top: 10px;
+        padding-top: 12px;
         border-top: 2px solid #0f172a;
-        font-size: 16px;
+        font-size: 15px;
       }
 
       .note {
-        min-height: 70px;
-        font-size: 12px;
-        color: #475569;
-      }
-
-      .footer {
-        margin-top: 16px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-      }
-
-      .terms {
-        font-size: 11px;
-        color: #64748b;
+        min-height: 78px;
         line-height: 1.5;
+        color: #475569;
+        font-size: 12px;
+      }
+
+      .signatures {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 44px;
       }
 
       .sign {
-        height: 80px;
+        height: 92px;
         border: 1px dashed #cbd5e1;
-        border-radius: 14px;
-        padding: 12px;
+        border-radius: 18px;
+        padding: 14px;
         color: #64748b;
         font-size: 12px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .footer {
+        margin-top: 24px;
+        padding-top: 14px;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        color: #6b7280;
+        font-size: 10px;
+        line-height: 1.5;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        background: #f1f5f9;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 800;
+        color: #334155;
       }
 
       @media print {
-        body { padding: 16px; }
+        body {
+          padding: 0;
+          background: white;
+        }
+
+        .page {
+          width: 100%;
+          min-height: auto;
+          box-shadow: none;
+          border-radius: 0;
+        }
       }
     </style>
   `;
 }
 
+function header(company, title, number, date) {
+  return `
+    <div class="top">
+      <div class="brand">
+        <div class="logo">
+          ${
+            company.logoUrl
+              ? `<img src="${company.logoUrl}" alt="${safe(company.name)}" />`
+              : `LOGO`
+          }
+        </div>
+
+        <div>
+          <h1>${safe(company.name)}</h1>
+          <p>${safe(company.subtitle)}</p>
+          <p>${safe(company.slogan)}</p>
+          <p>${[company.phone, company.email, company.website].filter(Boolean).join(" · ")}</p>
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <div class="engine">DOCUMENT ENGINE 2.0</div>
+        <h2>${title}</h2>
+        <p><b>No:</b> ${safe(number)}</p>
+        <p><b>Tarih:</b> ${safe(date)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function footer(company) {
+  return `
+    <div class="footer">
+      <div>
+        <b>${safe(company.name)}</b><br/>
+        ${safe(company.address)}<br/>
+        Vergi Dairesi: ${safe(company.taxOffice)} · Vergi No: ${safe(company.taxNumber)}
+      </div>
+
+      <div style="text-align:right;">
+        ${safe(company.footer)}<br/>
+        ${company.mersisNo ? `MERSİS: ${company.mersisNo}<br/>` : ""}
+        ${company.iban ? `IBAN: ${company.iban}` : ""}
+      </div>
+    </div>
+  `;
+}
+
 export function printQuoteDocument(quote) {
+  const company = getCompanyProfile();
   const operations = quote.operations || [];
   const totals = quote.totals || {};
+  const quoteNo = safe(quote.id || quote.quoteNo);
 
   const html = `
     <html>
       <head>
-        <title>${safe(quote.id)} Teklif</title>
+        <title>${quoteNo} Teklif</title>
         ${baseStyle()}
       </head>
 
       <body>
         <div class="page">
-          <div class="header">
-            <div class="brand">
-              <h1>EFE CNC KALIP</h1>
-              <p>ForgeERP by EFE CNC</p>
-              <p>Kalıp • CNC İşleme • Tersine Mühendislik • Kalite Kontrol</p>
-              <p>www.efecnckalip.com</p>
+          ${header(
+            company,
+            "TEKLİF FORMU",
+            quoteNo,
+            quote.createdAt ? new Date(quote.createdAt).toLocaleDateString("tr-TR") : today()
+          )}
+
+          <div class="content">
+            <div class="grid-2">
+              <div class="card">
+                <h3>Müşteri Bilgileri</h3>
+                <div class="row"><span>Firma</span><b>${safe(quote.customer)}</b></div>
+                <div class="row"><span>Yetkili</span><b>${safe(quote.contactName)}</b></div>
+                <div class="row"><span>Telefon</span><b>${safe(quote.phone)}</b></div>
+                <div class="row"><span>E-posta</span><b>${safe(quote.email)}</b></div>
+              </div>
+
+              <div class="card">
+                <h3>Parça / İş Bilgileri</h3>
+                <div class="row"><span>İş / Parça</span><b>${safe(quote.title)}</b></div>
+                <div class="row"><span>Teklif Türü</span><b>${safe(quote.quoteType)}</b></div>
+                <div class="row"><span>Malzeme</span><b>${safe(quote.material)}</b></div>
+                <div class="row"><span>Malzeme Tipi</span><b>${safe(quote.materialType)}</b></div>
+                <div class="row"><span>Ağırlık</span><b>${Number(quote.calculatedWeight || totals.materialWeight || 0).toFixed(2)} kg</b></div>
+              </div>
             </div>
 
-            <div class="doc-title">
-              <h2>TEKLİF FORMU</h2>
-              <p><b>${safe(quote.id)}</b></p>
-              <p>${quote.createdAt ? new Date(quote.createdAt).toLocaleDateString("tr-TR") : today()}</p>
-            </div>
-          </div>
-
-          <div class="grid">
-            <div class="card">
-              <h3>Müşteri Bilgileri</h3>
-              <div class="row"><span>Firma</span><b>${safe(quote.customer)}</b></div>
-              <div class="row"><span>Yetkili</span><b>—</b></div>
-              <div class="row"><span>Telefon</span><b>—</b></div>
-              <div class="row"><span>E-posta</span><b>—</b></div>
-            </div>
-
-            <div class="card">
-              <h3>Parça / İş Bilgileri</h3>
-              <div class="row"><span>İş / Parça</span><b>${safe(quote.title)}</b></div>
-              <div class="row"><span>Teklif Türü</span><b>${safe(quote.quoteType)}</b></div>
-              <div class="row"><span>Malzeme</span><b>${safe(quote.material)}</b></div>
-              <div class="row"><span>Malzeme Tipi</span><b>${safe(quote.materialType)}</b></div>
-              <div class="row"><span>Ağırlık</span><b>${Number(quote.calculatedWeight || totals.materialWeight || 0).toFixed(2)} kg</b></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <h3>Operasyon Listesi</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Operasyon</th>
-                  <th>Saat</th>
-                  <th>Saatlik</th>
-                  <th>Tutar</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  operations.length
-                    ? operations
-                        .map(
-                          (op) => `
-                            <tr>
-                              <td>${safe(op.name)}</td>
-                              <td>${safe(op.hours)}</td>
-                              <td>${money(op.hourlyRate)}</td>
-                              <td>${money(Number(op.hours || 0) * Number(op.hourlyRate || 0))}</td>
-                            </tr>
-                          `
-                        )
-                        .join("")
-                    : `<tr><td colspan="4">Operasyon bulunmuyor.</td></tr>`
-                }
-              </tbody>
-            </table>
-          </div>
-
-          <div class="grid" style="margin-top:12px;">
-            <div class="card note">
-              <h3>Notlar</h3>
-              <p>${safe(quote.note)}</p>
+            <div class="card" style="margin-top:14px;">
+              <h3>Operasyon Listesi</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Operasyon</th>
+                    <th>Saat</th>
+                    <th>Saatlik</th>
+                    <th>Tutar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    operations.length
+                      ? operations
+                          .map(
+                            (op) => `
+                              <tr>
+                                <td>${safe(op.name)}</td>
+                                <td>${safe(op.hours)}</td>
+                                <td>${money(op.hourlyRate)}</td>
+                                <td>${money(Number(op.hours || 0) * Number(op.hourlyRate || 0))}</td>
+                              </tr>
+                            `
+                          )
+                          .join("")
+                      : `<tr><td colspan="4">Operasyon bulunmuyor.</td></tr>`
+                  }
+                </tbody>
+              </table>
             </div>
 
-            <div class="summary">
-              <h3>Maliyet Özeti</h3>
-              <div class="row"><span>İşçilik</span><b>${money(totals.operationTotal)}</b></div>
-              <div class="row"><span>Malzeme</span><b>${money(totals.materialTotal)}</b></div>
-              <div class="row"><span>Ek Maliyet</span><b>${money(totals.extraCost)}</b></div>
-              <div class="row"><span>Kâr</span><b>${money(totals.profit)}</b></div>
-              <div class="row grand"><span>Genel Toplam</span><b>${money(totals.grandTotal)}</b></div>
-            </div>
-          </div>
+            <div class="grid-2" style="margin-top:14px;">
+              <div class="card note">
+                <h3>Notlar</h3>
+                <p>${safe(quote.note)}</p>
+              </div>
 
-          <div class="footer">
-            <div class="terms">
-              <b>Teklif Şartları</b><br/>
-              Bu teklif verilen teknik bilgiler doğrultusunda hazırlanmıştır. Ölçü, malzeme, revizyon ve ek operasyon değişikliklerinde teklif yeniden değerlendirilir. Teklif geçerlilik süresi 30 gündür.
+              <div class="summary">
+                <h3>Maliyet Özeti</h3>
+                <div class="row"><span>İşçilik</span><b>${money(totals.operationTotal)}</b></div>
+                <div class="row"><span>Malzeme</span><b>${money(totals.materialTotal)}</b></div>
+                <div class="row"><span>Ek Maliyet</span><b>${money(totals.extraCost)}</b></div>
+                <div class="row"><span>Kâr</span><b>${money(totals.profit)}</b></div>
+                <div class="row grand"><span>Genel Toplam</span><b>${money(totals.grandTotal)}</b></div>
+              </div>
             </div>
 
-            <div class="sign">
-              Kaşe / İmza
+            <div class="grid-2" style="margin-top:18px;">
+              <div class="card note">
+                <h3>Teklif Şartları</h3>
+                <p>
+                  Bu teklif verilen teknik bilgiler doğrultusunda hazırlanmıştır.
+                  Ölçü, malzeme, revizyon ve ek operasyon değişikliklerinde teklif yeniden değerlendirilir.
+                  Teklif geçerlilik süresi 30 gündür.
+                </p>
+              </div>
+
+              <div class="sign">
+                <b>Kaşe / İmza</b>
+                <span>Yetkili onayı</span>
+              </div>
             </div>
+
+            ${footer(company)}
           </div>
         </div>
       </body>
@@ -310,90 +494,131 @@ export function printQuoteDocument(quote) {
 }
 
 export function printDeliveryNoteDocument(job) {
+  const company = getCompanyProfile();
+  const deliveryNo = docNo("SVK", job.deliveryNo || job.jobNo || job.id);
+  const rows = Array.isArray(job.items) && job.items.length
+    ? job.items
+    : [
+        {
+          name: job.title,
+          material: job.material,
+          quantity: 1,
+          unit: "Adet",
+          note: job.materialType || job.description,
+        },
+      ];
+
   const html = `
     <html>
       <head>
-        <title>${safe(job.jobNo || job.id)} Sevk Formu</title>
+        <title>${deliveryNo} Sevk Formu</title>
         ${baseStyle()}
       </head>
 
       <body>
         <div class="page">
-          <div class="header">
-            <div class="brand">
-              <h1>EFE CNC KALIP</h1>
-              <p>ForgeERP by EFE CNC</p>
-              <p>Kalıp • CNC İşleme • Tersine Mühendislik • Kalite Kontrol</p>
-              <p>www.efecnckalip.com</p>
+          ${header(company, "SEVK FORMU", deliveryNo, today())}
+
+          <div class="content">
+            <div class="grid-3">
+              <div class="card soft">
+                <h3>Müşteri</h3>
+                <div class="row"><span>Firma</span><b>${safe(job.customer)}</b></div>
+                <div class="row"><span>Yetkili</span><b>${safe(job.contactName)}</b></div>
+                <div class="row"><span>Telefon</span><b>${safe(job.customerPhone || job.phone)}</b></div>
+              </div>
+
+              <div class="card soft">
+                <h3>İş Bağlantısı</h3>
+                <div class="row"><span>İş No</span><b>${safe(job.jobNo || job.id)}</b></div>
+                <div class="row"><span>Teklif No</span><b>${safe(job.quoteNo)}</b></div>
+                <div class="row"><span>Durum</span><b>${safe(job.status)}</b></div>
+              </div>
+
+              <div class="card soft">
+                <h3>Sevk Bilgisi</h3>
+                <div class="row"><span>Tip</span><b>${safe(job.deliveryType || "Standart Sevk")}</b></div>
+                <div class="row"><span>Plaka</span><b>${safe(job.vehiclePlate)}</b></div>
+                <div class="row"><span>Şoför</span><b>${safe(job.driverName)}</b></div>
+              </div>
             </div>
 
-            <div class="doc-title">
-              <h2>SEVK FORMU</h2>
-              <p><b>${safe(job.jobNo || job.id)}</b></p>
-              <p>${today()}</p>
-            </div>
-          </div>
+            <div class="grid-2" style="margin-top:14px;">
+              <div class="card">
+                <h3>Alıcı Adresi</h3>
+                <div class="note">${safe(job.customerAddress || job.address)}</div>
+              </div>
 
-          <div class="grid">
-            <div class="card">
-              <h3>Alıcı Bilgileri</h3>
-              <div class="row"><span>Firma</span><b>${safe(job.customer)}</b></div>
-              <div class="row"><span>Yetkili</span><b>—</b></div>
-              <div class="row"><span>Telefon</span><b>—</b></div>
-              <div class="row"><span>Adres</span><b>—</b></div>
+              <div class="card">
+                <h3>Teslim Bilgileri</h3>
+                <div class="row"><span>Teslim Eden</span><b>${safe(company.name)}</b></div>
+                <div class="row"><span>Teslim Alan</span><b>${safe(job.receiverName)}</b></div>
+                <div class="row"><span>Tarih</span><b>${today()}</b></div>
+              </div>
             </div>
 
-            <div class="card">
-              <h3>İş Bilgileri</h3>
-              <div class="row"><span>İş No</span><b>${safe(job.jobNo || job.id)}</b></div>
-              <div class="row"><span>Teklif No</span><b>${safe(job.quoteNo)}</b></div>
-              <div class="row"><span>İş / Parça</span><b>${safe(job.title)}</b></div>
-              <div class="row"><span>Malzeme</span><b>${safe(job.material)}</b></div>
-            </div>
-          </div>
-
-          <div class="card">
-            <h3>Sevk Edilen Ürünler</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Sıra</th>
-                  <th>Ürün / Parça</th>
-                  <th>Malzeme</th>
-                  <th>Adet</th>
-                  <th>Açıklama</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>1</td>
-                  <td>${safe(job.title)}</td>
-                  <td>${safe(job.material)}</td>
-                  <td>1</td>
-                  <td>${safe(job.materialType)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="grid" style="margin-top:12px;">
-            <div class="card note">
-              <h3>Sevk Notu</h3>
-              <p>Ürün / parça teslim edilmiştir.</p>
+            <div class="card" style="margin-top:14px;">
+              <h3>Sevk Edilen Ürünler</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:45px;">#</th>
+                    <th>Ürün / Parça</th>
+                    <th>Malzeme</th>
+                    <th style="width:85px;">Miktar</th>
+                    <th style="width:80px;">Birim</th>
+                    <th>Açıklama</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows
+                    .map(
+                      (item, index) => `
+                        <tr>
+                          <td>${index + 1}</td>
+                          <td><b>${safe(item.name || item.title || job.title)}</b></td>
+                          <td>${safe(item.material || job.material)}</td>
+                          <td>${safe(item.quantity || 1)}</td>
+                          <td>${safe(item.unit || "Adet")}</td>
+                          <td>${safe(item.note || job.materialType || job.description)}</td>
+                        </tr>
+                      `
+                    )
+                    .join("")}
+                </tbody>
+              </table>
             </div>
 
-            <div class="card">
-              <h3>Teslim Bilgileri</h3>
-              <div class="row"><span>Teslim Eden</span><b>EFE CNC KALIP</b></div>
-              <div class="row"><span>Teslim Alan</span><b>—</b></div>
-              <div class="row"><span>Araç / Plaka</span><b>—</b></div>
-              <div class="row"><span>Tarih</span><b>${today()}</b></div>
-            </div>
-          </div>
+            <div class="grid-2" style="margin-top:14px;">
+              <div class="card note">
+                <h3>Sevk Notu</h3>
+                <p>${safe(job.deliveryNote || job.description || "Ürün / parça teslim edilmiştir.")}</p>
+              </div>
 
-          <div class="footer">
-            <div class="sign">Teslim Eden<br/><br/>Kaşe / İmza</div>
-            <div class="sign">Teslim Alan<br/><br/>Kaşe / İmza</div>
+              <div class="card">
+                <h3>Kontrol</h3>
+                <div class="row"><span>Malzeme Tipi</span><b>${safe(job.materialType)}</b></div>
+                <div class="row"><span>Makine</span><b>${safe(job.machineName || job.machine)}</b></div>
+                <div class="row"><span>Operatör</span><b>${safe(job.operator)}</b></div>
+              </div>
+            </div>
+
+            <div class="signatures">
+              <div class="sign">
+                <b>Teslim Eden</b>
+                <span>Kaşe / İmza</span>
+              </div>
+              <div class="sign">
+                <b>Teslim Alan</b>
+                <span>Ad Soyad / İmza</span>
+              </div>
+              <div class="sign">
+                <b>Firma Onayı</b>
+                <span>Kaşe / İmza</span>
+              </div>
+            </div>
+
+            ${footer(company)}
           </div>
         </div>
       </body>

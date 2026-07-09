@@ -5,6 +5,9 @@ import Jobs from "./pages/Jobs";
 import Quotes from "./pages/Quotes";
 import Customers from "./pages/Customers";
 import Machines from "./pages/Machines";
+import Production from "./pages/Production";
+import Purchases from "./pages/Purchases";
+import Finance from "./pages/Finance";
 
 function PlaceholderPage({ title }) {
   return (
@@ -31,7 +34,7 @@ export default function App() {
         return <Jobs />;
 
       case "Üretim":
-        return <Jobs />;
+        return <Production />;
 
       case "Müşteriler":
         return <Customers />;
@@ -43,10 +46,10 @@ export default function App() {
         return <Machines />;
 
       case "Satın Alma":
-        return <PlaceholderPage title="Satın Alma" />;
+        return <Purchases />;
 
       case "Finans":
-        return <PlaceholderPage title="Finans" />;
+        return <Finance />;
 
       case "Stok":
         return <PlaceholderPage title="Stok" />;
@@ -69,3 +72,4 @@ export default function App() {
     </div>
   );
 }
+

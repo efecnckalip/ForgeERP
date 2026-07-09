@@ -21,6 +21,10 @@ import {
   MapPin,
   Landmark,
   Clock,
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  RotateCcw,
 } from "lucide-react";
 import {
   getCustomers,
@@ -40,6 +44,7 @@ const emptyCustomer = {
   taxOffice: "",
   address: "",
   sector: "",
+  city: "",
   note: "",
   status: "active",
   isFavorite: false,
@@ -53,6 +58,8 @@ const filterLabels = {
   quoted: "Teklifli",
   worked: "İşli",
 };
+
+const PAGE_SIZE = 8;
 
 function safe(value) {
   return value || "—";
@@ -80,12 +87,40 @@ function getJobAmount(j) {
 
 function formatDate(value) {
   if (!value) return "—";
-
   try {
     return new Date(value).toLocaleDateString("tr-TR");
   } catch {
     return "—";
   }
+}
+
+function getInitials(name) {
+  const words = String(name || "")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+  if (!words.length) return "—";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+
+  return `${words[0][0] || ""}${words[1][0] || ""}`.toUpperCase();
+}
+
+function avatarTone(name) {
+  const tones = [
+    "bg-blue-50 text-blue-700 ring-blue-100",
+    "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    "bg-violet-50 text-violet-700 ring-violet-100",
+    "bg-amber-50 text-amber-700 ring-amber-100",
+    "bg-cyan-50 text-cyan-700 ring-cyan-100",
+    "bg-rose-50 text-rose-700 ring-rose-100",
+  ];
+
+  const sum = String(name || "")
+    .split("")
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+
+  return tones[sum % tones.length];
 }
 
 function getCustomerMetrics(customer, quotes, jobs) {
@@ -133,9 +168,18 @@ export default function Customers() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("quotes");
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState(null);
   const [form, setForm] = useState(emptyCustomer);
+  const [page, setPage] = useState(1);
+
+  const [advancedFilters, setAdvancedFilters] = useState({
+    status: "all",
+    authorized: "all",
+    sector: "all",
+    city: "all",
+  });
 
   function loadData() {
     const loadedCustomers = getCustomers().map((customer) => ({
@@ -186,6 +230,14 @@ export default function Customers() {
     };
   }, [enrichedCustomers]);
 
+  const filterOptions = useMemo(() => {
+    const sectors = [...new Set(enrichedCustomers.map((c) => c.sector).filter(Boolean))];
+    const authorizeds = [...new Set(enrichedCustomers.map((c) => c.authorized).filter(Boolean))];
+    const cities = [...new Set(enrichedCustomers.map((c) => c.city).filter(Boolean))];
+
+    return { sectors, authorizeds, cities };
+  }, [enrichedCustomers]);
+
   const filteredCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -196,6 +248,11 @@ export default function Customers() {
         if (activeFilter === "passive" && customer.status !== "passive") return false;
         if (activeFilter === "quoted" && customer.metrics.quoteCount === 0) return false;
         if (activeFilter === "worked" && customer.metrics.jobCount === 0) return false;
+
+        if (advancedFilters.status !== "all" && customer.status !== advancedFilters.status) return false;
+        if (advancedFilters.authorized !== "all" && customer.authorized !== advancedFilters.authorized) return false;
+        if (advancedFilters.sector !== "all" && customer.sector !== advancedFilters.sector) return false;
+        if (advancedFilters.city !== "all" && customer.city !== advancedFilters.city) return false;
 
         if (!q) return true;
 
@@ -211,7 +268,18 @@ export default function Customers() {
         if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
         return String(a.name || "").localeCompare(String(b.name || ""), "tr");
       });
-  }, [enrichedCustomers, search, activeFilter]);
+  }, [enrichedCustomers, search, activeFilter, advancedFilters]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, activeFilter, advancedFilters]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredCustomers.length / PAGE_SIZE));
+
+  const pagedCustomers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredCustomers.slice(start, start + PAGE_SIZE);
+  }, [filteredCustomers, page]);
 
   const selectedCustomer =
     enrichedCustomers.find((c) => c.id === selectedId) ||
@@ -301,6 +369,15 @@ export default function Customers() {
     setEditMode(false);
   }
 
+  function clearAdvancedFilters() {
+    setAdvancedFilters({
+      status: "all",
+      authorized: "all",
+      sector: "all",
+      city: "all",
+    });
+  }
+
   const detailCustomer = editMode && draft ? draft : selectedCustomer;
 
   return (
@@ -314,38 +391,15 @@ export default function Customers() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <TopStat
-            title="Toplam Müşteri"
-            value={globalStats.total}
-            active={activeFilter === "all"}
-            onClick={() => setActiveFilter("all")}
-          />
-          <TopStat
-            title="Favori Müşteri"
-            value={globalStats.favorite}
-            active={activeFilter === "favorite"}
-            onClick={() => setActiveFilter("favorite")}
-            tone="amber"
-          />
-          <TopStat
-            title="Teklifli"
-            value={globalStats.quoted}
-            active={activeFilter === "quoted"}
-            onClick={() => setActiveFilter("quoted")}
-            tone="blue"
-          />
-          <TopStat
-            title="İşli"
-            value={globalStats.worked}
-            active={activeFilter === "worked"}
-            onClick={() => setActiveFilter("worked")}
-            tone="emerald"
-          />
+          <TopStat title="Toplam Müşteri" value={globalStats.total} active={activeFilter === "all"} onClick={() => setActiveFilter("all")} />
+          <TopStat title="Favori Müşteri" value={globalStats.favorite} active={activeFilter === "favorite"} onClick={() => setActiveFilter("favorite")} tone="amber" />
+          <TopStat title="Teklifli Müşteri" value={globalStats.quoted} active={activeFilter === "quoted"} onClick={() => setActiveFilter("quoted")} tone="blue" />
+          <TopStat title="İşli Müşteri" value={globalStats.worked} active={activeFilter === "worked"} onClick={() => setActiveFilter("worked")} tone="emerald" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1.05fr_1.15fr]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -357,32 +411,90 @@ export default function Customers() {
               />
             </div>
 
-            <button className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 hover:bg-slate-50">
+            <button
+              onClick={() => setShowAdvancedFilter((prev) => !prev)}
+              className={`inline-flex h-12 items-center justify-center gap-2 rounded-2xl border px-5 text-sm font-black transition ${
+                showAdvancedFilter
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
               <Filter size={17} />
               Filtrele
             </button>
 
             <button
               onClick={openNewCustomer}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-black text-white hover:bg-slate-800"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white shadow-sm hover:bg-slate-800"
             >
               <Plus size={17} />
               Yeni Müşteri
             </button>
           </div>
 
+          {showAdvancedFilter && (
+            <div className="mb-4 grid grid-cols-1 gap-3 rounded-3xl border border-slate-100 bg-slate-50/70 p-4 md:grid-cols-4 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+              <FilterSelect label="Durum" value={advancedFilters.status} onChange={(v) => setAdvancedFilters({ ...advancedFilters, status: v })}>
+                <option value="all">Tümü</option>
+                <option value="active">Aktif</option>
+                <option value="passive">Pasif</option>
+              </FilterSelect>
+
+              <FilterSelect label="Yetkili" value={advancedFilters.authorized} onChange={(v) => setAdvancedFilters({ ...advancedFilters, authorized: v })}>
+                <option value="all">Tümü</option>
+                {filterOptions.authorizeds.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </FilterSelect>
+
+              <FilterSelect label="Sektör" value={advancedFilters.sector} onChange={(v) => setAdvancedFilters({ ...advancedFilters, sector: v })}>
+                <option value="all">Tümü</option>
+                {filterOptions.sectors.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </FilterSelect>
+
+              <FilterSelect label="Şehir" value={advancedFilters.city} onChange={(v) => setAdvancedFilters({ ...advancedFilters, city: v })}>
+                <option value="all">Tümü</option>
+                {filterOptions.cities.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </FilterSelect>
+
+              <button
+                onClick={clearAdvancedFilters}
+                className="mt-auto inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 hover:bg-slate-50"
+              >
+                <RotateCcw size={16} />
+                Temizle
+              </button>
+            </div>
+          )}
+
           <div className="mb-4 flex flex-wrap gap-2">
             {Object.entries(filterLabels).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setActiveFilter(key)}
-                className={`rounded-xl border px-4 py-2 text-xs font-black transition ${
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-black transition ${
                   activeFilter === key
-                    ? "border-blue-600 bg-blue-600 text-white"
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-100"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
                 {label}
+                <span
+                  className={`rounded-lg px-2 py-0.5 ${
+                    activeFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {key === "all" && globalStats.total}
+                  {key === "favorite" && globalStats.favorite}
+                  {key === "active" && enrichedCustomers.filter((c) => c.status === "active").length}
+                  {key === "passive" && enrichedCustomers.filter((c) => c.status === "passive").length}
+                  {key === "quoted" && globalStats.quoted}
+                  {key === "worked" && globalStats.worked}
+                </span>
               </button>
             ))}
           </div>
@@ -392,26 +504,25 @@ export default function Customers() {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="w-10 px-3 py-3"></th>
-                  <th className="px-3 py-3">Firma Adı</th>
-                  <th className="px-3 py-3">Yetkili</th>
-                  <th className="px-3 py-3">Telefon</th>
+                  <th className="px-3 py-3">Firma / Yetkili</th>
+                  <th className="px-3 py-3">İletişim</th>
                   <th className="px-3 py-3 text-center">Teklif</th>
                   <th className="px-3 py-3 text-center">İş</th>
                   <th className="px-3 py-3 text-right">Ciro</th>
                   <th className="px-3 py-3 text-right">Son İşlem</th>
-                  <th className="w-8 px-3 py-3"></th>
+                  <th className="w-14 px-3 py-3"></th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredCustomers.length === 0 ? (
+                {pagedCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="px-4 py-12 text-center text-sm font-bold text-slate-400">
+                    <td colSpan="8" className="px-4 py-12 text-center text-sm font-bold text-slate-400">
                       Aramaya uygun müşteri bulunamadı.
                     </td>
                   </tr>
                 ) : (
-                  filteredCustomers.map((customer) => {
+                  pagedCustomers.map((customer) => {
                     const active = selectedCustomer?.id === customer.id;
 
                     return (
@@ -421,11 +532,14 @@ export default function Customers() {
                           setSelectedId(customer.id);
                           setEditMode(false);
                         }}
-                        className={`cursor-pointer border-b border-slate-100 transition ${
-                          active ? "bg-blue-50/70" : "hover:bg-slate-50"
+                        className={`group cursor-pointer border-b border-slate-100 transition-all duration-200 last:border-b-0 ${
+                          active
+                            ? "bg-gradient-to-r from-blue-50 via-blue-50/70 to-white shadow-sm"
+                            : "hover:bg-slate-50"
                         }`}
                       >
-                        <td className="px-3 py-3">
+                        <td className="relative px-3 py-4">
+                          {active && <span className="absolute left-0 top-3 h-10 w-1 rounded-r-full bg-blue-600" />}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -438,17 +552,47 @@ export default function Customers() {
                             <Star size={17} fill={customer.isFavorite ? "currentColor" : "none"} />
                           </button>
                         </td>
-                        <td className="px-3 py-3 font-black text-slate-900">{safe(customer.name)}</td>
-                        <td className="px-3 py-3 font-semibold text-slate-700">{safe(customer.authorized)}</td>
-                        <td className="px-3 py-3 font-semibold text-slate-600">{safe(customer.phone)}</td>
-                        <td className="px-3 py-3 text-center font-black text-blue-600">{customer.metrics.quoteCount}</td>
-                        <td className="px-3 py-3 text-center font-black text-emerald-600">{customer.metrics.jobCount}</td>
-                        <td className="px-3 py-3 text-right font-black text-slate-900">{money(customer.metrics.jobTotal)}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-slate-500">
+
+                        <td className="px-3 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ring-1 ${avatarTone(customer.name)}`}>
+                              {getInitials(customer.name)}
+                            </div>
+                            <div>
+                              <p className="font-black tracking-tight text-slate-950">{safe(customer.name)}</p>
+                              <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                {safe(customer.authorized)}
+                              </p>
+                              <p className="mt-1 text-xs font-bold text-slate-400">
+                                {customer.metrics.quoteCount} Teklif • {customer.metrics.jobCount} İş
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-4">
+                          <div className="space-y-1">
+                            <p className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                              <Phone size={14} />
+                              {safe(customer.phone)}
+                            </p>
+                            <p className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                              <Mail size={14} />
+                              {safe(customer.email)}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-4 text-center font-black text-blue-600">{customer.metrics.quoteCount}</td>
+                        <td className="px-3 py-4 text-center font-black text-emerald-600">{customer.metrics.jobCount}</td>
+                        <td className="px-3 py-4 text-right font-black text-slate-900">{money(customer.metrics.jobTotal)}</td>
+                        <td className="px-3 py-4 text-right font-semibold text-slate-500">
                           {formatDate(customer.metrics.lastActivityDate)}
                         </td>
-                        <td className="px-3 py-3 text-right text-slate-400">
-                          <Eye size={16} />
+                        <td className="px-3 py-4 text-right">
+                          <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 opacity-80 transition hover:bg-slate-50 group-hover:opacity-100">
+                            <MoreHorizontal size={17} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -458,9 +602,43 @@ export default function Customers() {
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm font-bold text-slate-500">
+          <div className="mt-4 flex flex-col gap-3 text-sm font-bold text-slate-500 md:flex-row md:items-center md:justify-between">
             <span>Toplam {filteredCustomers.length} kayıt</span>
-            <span>{filterLabels[activeFilter]}</span>
+
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              {Array.from({ length: pageCount }).map((_, index) => {
+                const pageNumber = index + 1;
+                return (
+                  <button
+                    key={pageNumber}
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-9 min-w-9 rounded-xl px-3 text-sm font-black ${
+                      page === pageNumber
+                        ? "bg-blue-600 text-white"
+                        : "border border-slate-200 bg-white text-slate-600"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              })}
+
+              <button
+                disabled={page === pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
         </section>
 
@@ -471,34 +649,42 @@ export default function Customers() {
             </div>
           ) : (
             <>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <button
-                        onClick={() => toggleFavorite()}
-                        className={`transition ${
-                          selectedCustomer?.isFavorite ? "text-amber-400" : "text-slate-300 hover:text-amber-400"
-                        }`}
-                      >
-                        <Star size={20} fill={selectedCustomer?.isFavorite ? "currentColor" : "none"} />
-                      </button>
-                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-                        Müşteri Kartı
-                      </p>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-black ${
-                          detailCustomer.status === "active"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {detailCustomer.status === "active" ? "Aktif" : "Pasif"}
-                      </span>
+                  <div className="flex items-start gap-4">
+                    <div className={`flex h-16 w-16 items-center justify-center rounded-full text-xl font-black ring-1 ${avatarTone(detailCustomer.name)}`}>
+                      {getInitials(detailCustomer.name)}
                     </div>
 
-                    <h2 className="text-2xl font-black text-slate-950">{safe(detailCustomer.name)}</h2>
-                    <p className="mt-2 text-sm font-semibold text-slate-400">—</p>
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <button
+                          onClick={() => toggleFavorite()}
+                          className={`transition ${
+                            selectedCustomer?.isFavorite ? "text-amber-400" : "text-slate-300 hover:text-amber-400"
+                          }`}
+                        >
+                          <Star size={20} fill={selectedCustomer?.isFavorite ? "currentColor" : "none"} />
+                        </button>
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+                          Müşteri Kartı
+                        </p>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black ${
+                            detailCustomer.status === "active"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {detailCustomer.status === "active" ? "Aktif" : "Pasif"}
+                        </span>
+                      </div>
+
+                      <h2 className="text-2xl font-black text-slate-950">{safe(detailCustomer.name)}</h2>
+                      <p className="mt-1 text-sm font-black uppercase tracking-wide text-slate-500">
+                        {safe(detailCustomer.authorized)}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -512,27 +698,18 @@ export default function Customers() {
                       </button>
                     ) : (
                       <>
-                        <button
-                          onClick={saveEdit}
-                          className="inline-flex h-10 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700"
-                        >
+                        <button onClick={saveEdit} className="inline-flex h-10 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700">
                           <Save size={16} />
                           Kaydet
                         </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
-                        >
+                        <button onClick={cancelEdit} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 hover:bg-slate-50">
                           <X size={16} />
                           İptal
                         </button>
                       </>
                     )}
 
-                    <button
-                      onClick={handleDelete}
-                      className="inline-flex h-10 items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 text-sm font-black text-red-600 hover:bg-red-100"
-                    >
+                    <button onClick={handleDelete} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 text-sm font-black text-red-600 hover:bg-red-100">
                       <Trash2 size={16} />
                       Sil
                     </button>
@@ -554,20 +731,12 @@ export default function Customers() {
                   <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <label>
                       <p className="mb-1 text-xs font-bold text-slate-500">Firma Adı</p>
-                      <input
-                        value={draft?.name || ""}
-                        onChange={(e) => updateDraft("name", e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400"
-                      />
+                      <input value={draft?.name || ""} onChange={(e) => updateDraft("name", e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400" />
                     </label>
 
                     <label>
                       <p className="mb-1 text-xs font-bold text-slate-500">Durum</p>
-                      <select
-                        value={draft?.status || "active"}
-                        onChange={(e) => updateDraft("status", e.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400"
-                      >
+                      <select value={draft?.status || "active"} onChange={(e) => updateDraft("status", e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400">
                         <option value="active">Aktif</option>
                         <option value="passive">Pasif</option>
                       </select>
@@ -585,7 +754,7 @@ export default function Customers() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="mb-4 flex flex-wrap gap-5 border-b border-slate-100">
                   <TabButton active={activeTab === "quotes"} onClick={() => setActiveTab("quotes")}>Teklif Geçmişi</TabButton>
                   <TabButton active={activeTab === "jobs"} onClick={() => setActiveTab("jobs")}>İş Geçmişi</TabButton>
@@ -622,17 +791,9 @@ export default function Customers() {
                   />
                 )}
 
-                {activeTab === "notes" && (
-                  <EmptyBox title="Notlar" desc={safe(selectedCustomer.note)} />
-                )}
-
-                {activeTab === "files" && (
-                  <EmptyBox title="Dosya bulunamadı." desc="Müşteriye ait dosyalar ileride burada listelenecek." />
-                )}
-
-                {activeTab === "activities" && (
-                  <EmptyBox title="Aktivite bulunamadı." desc="Müşteriye ait aktiviteler burada listelenecek." />
-                )}
+                {activeTab === "notes" && <EmptyBox title="Notlar" desc={safe(selectedCustomer.note)} />}
+                {activeTab === "files" && <EmptyBox title="Dosya bulunamadı." desc="Müşteriye ait dosyalar ileride burada listelenecek." />}
+                {activeTab === "activities" && <EmptyBox title="Aktivite bulunamadı." desc="Müşteriye ait aktiviteler burada listelenecek." />}
               </div>
             </>
           )}
@@ -641,10 +802,7 @@ export default function Customers() {
 
       {showDrawer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <form
-            onSubmit={handleAddCustomer}
-            className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl"
-          >
+          <form onSubmit={handleAddCustomer} className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
             <div className="mb-6 flex items-start justify-between">
               <div>
                 <h2 className="text-2xl font-black text-slate-950">Yeni Müşteri</h2>
@@ -653,11 +811,7 @@ export default function Customers() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowDrawer(false)}
-                className="rounded-2xl bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
-              >
+              <button type="button" onClick={() => setShowDrawer(false)} className="rounded-2xl bg-slate-100 p-2 text-slate-500 hover:bg-slate-200">
                 <X size={20} />
               </button>
             </div>
@@ -668,25 +822,18 @@ export default function Customers() {
               <DrawerInput label="Telefon" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
               <DrawerInput label="E-posta" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
               <DrawerInput label="Sektör" value={form.sector} onChange={(v) => setForm({ ...form, sector: v })} />
+              <DrawerInput label="Şehir" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
               <DrawerInput label="Vergi No" value={form.taxNo} onChange={(v) => setForm({ ...form, taxNo: v })} />
               <DrawerInput label="Vergi Dairesi" value={form.taxOffice} onChange={(v) => setForm({ ...form, taxOffice: v })} />
 
               <label>
                 <p className="mb-1 text-xs font-bold text-slate-500">Adres</p>
-                <textarea
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="min-h-[86px] w-full rounded-2xl border border-slate-200 p-4 text-sm font-bold outline-none focus:border-blue-400"
-                />
+                <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="min-h-[86px] w-full rounded-2xl border border-slate-200 p-4 text-sm font-bold outline-none focus:border-blue-400" />
               </label>
 
               <label>
                 <p className="mb-1 text-xs font-bold text-slate-500">Not</p>
-                <textarea
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                  className="min-h-[86px] w-full rounded-2xl border border-slate-200 p-4 text-sm font-bold outline-none focus:border-blue-400"
-                />
+                <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="min-h-[86px] w-full rounded-2xl border border-slate-200 p-4 text-sm font-bold outline-none focus:border-blue-400" />
               </label>
 
               <button className="h-12 w-full rounded-2xl bg-slate-900 text-sm font-black text-white hover:bg-slate-800">
@@ -700,6 +847,21 @@ export default function Customers() {
   );
 }
 
+function FilterSelect({ label, value, onChange, children }) {
+  return (
+    <label>
+      <p className="mb-1 text-xs font-black text-slate-500">{label}</p>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 outline-none focus:border-blue-400"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
 function TopStat({ title, value, active, onClick, tone = "slate" }) {
   const tones = {
     slate: "bg-slate-50 text-slate-700",
@@ -709,12 +871,7 @@ function TopStat({ title, value, active, onClick, tone = "slate" }) {
   };
 
   return (
-    <button
-      onClick={onClick}
-      className={`min-w-[132px] rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-        active ? "border-blue-400 ring-4 ring-blue-50" : "border-slate-200"
-      }`}
-    >
+    <button onClick={onClick} className={`min-w-[132px] rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${active ? "border-blue-400 ring-4 ring-blue-50" : "border-slate-200"}`}>
       <div className={`mb-2 inline-flex rounded-xl px-2 py-1 text-xs font-black ${tones[tone]}`}>
         {title}
       </div>
@@ -731,15 +888,9 @@ function DetailField({ icon, label, value, editable, onChange, wide }) {
         <div className="flex-1">
           <p className="text-xs font-bold text-slate-500">{label}</p>
           {editable ? (
-            <textarea
-              value={value || ""}
-              onChange={(e) => onChange(e.target.value)}
-              className="mt-1 min-h-[44px] w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-blue-400"
-            />
+            <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 min-h-[44px] w-full rounded-xl border border-slate-200 p-3 text-sm font-bold outline-none focus:border-blue-400" />
           ) : (
-            <p className="mt-1 whitespace-pre-wrap text-sm font-black text-slate-900">
-              {safe(value)}
-            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm font-black text-slate-900">{safe(value)}</p>
           )}
         </div>
       </div>
@@ -768,23 +919,14 @@ function MetricCard({ icon, label, value, tone = "blue" }) {
 
 function TabButton({ active, onClick, children }) {
   return (
-    <button
-      onClick={onClick}
-      className={`border-b-2 px-1 pb-3 text-sm font-black transition ${
-        active
-          ? "border-blue-600 text-blue-600"
-          : "border-transparent text-slate-500 hover:text-slate-900"
-      }`}
-    >
+    <button onClick={onClick} className={`border-b-2 px-1 pb-3 text-sm font-black transition ${active ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-900"}`}>
       {children}
     </button>
   );
 }
 
 function HistoryTable({ rows, emptyTitle, emptyDesc }) {
-  if (!rows.length) {
-    return <EmptyBox title={emptyTitle} desc={emptyDesc} />;
-  }
+  if (!rows.length) return <EmptyBox title={emptyTitle} desc={emptyDesc} />;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-100">
@@ -834,12 +976,7 @@ function DrawerInput({ label, value, onChange, required = false }) {
   return (
     <label>
       <p className="mb-1 text-xs font-bold text-slate-500">{label}</p>
-      <input
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400"
-      />
+      <input required={required} value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400" />
     </label>
   );
 }

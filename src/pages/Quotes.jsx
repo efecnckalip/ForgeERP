@@ -11,8 +11,12 @@ import {
   Briefcase,
   DollarSign,
   Upload,
-  CalendarDays,
   Download,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Package,
+  Wrench,
 } from "lucide-react";
 import { getCurrentPeriod, getRecentPeriods } from "../utils/period";
 import { printQuoteDocument } from "../services/documentService";
@@ -102,6 +106,8 @@ const emptyCustomer = {
   note: "",
 };
 
+const PAGE_SIZE = 4;
+
 function toNumber(value) {
   const n = Number(String(value || 0).replace(",", "."));
   return Number.isFinite(n) ? n : 0;
@@ -109,7 +115,7 @@ function toNumber(value) {
 
 function currency(value) {
   return `${Number(value || 0).toLocaleString("tr-TR", {
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 0,
   })} ₺`;
 }
 
@@ -159,10 +165,12 @@ export default function Quotes() {
   const [customers, setCustomers] = useState(() => getCustomers());
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [quoteSearch, setQuoteSearch] = useState("");
   const [showCustomerPanel, setShowCustomerPanel] = useState(false);
   const [newCustomer, setNewCustomer] = useState(emptyCustomer);
   const [draftFileOwnerId, setDraftFileOwnerId] = useState(() => crypto.randomUUID());
   const [uploadedFiles, setUploadedFiles] = useState(() => []);
+  const [page, setPage] = useState(1);
   const fileInputRef = useRef(null);
 
   const hasMaterial = quote.quoteType === "İşçilik + Malzeme";
@@ -171,6 +179,25 @@ export default function Quotes() {
   const periodQuotes = useMemo(() => {
     return savedQuotes.filter((q) => q.periodKey === activePeriod.periodKey);
   }, [savedQuotes, activePeriod]);
+
+  const searchedQuotes = useMemo(() => {
+    const q = quoteSearch.trim().toLowerCase();
+    if (!q) return periodQuotes;
+
+    return periodQuotes.filter((item) =>
+      [item.id, item.customer, item.title, item.quoteType, item.status]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [periodQuotes, quoteSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(searchedQuotes.length / PAGE_SIZE));
+
+  const pagedQuotes = useMemo(() => {
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return searchedQuotes.slice(start, start + PAGE_SIZE);
+  }, [searchedQuotes, page, totalPages]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -233,6 +260,7 @@ export default function Quotes() {
     setActivePeriod(selected);
     saveActivePeriod(selected);
     setSelectedQuote(null);
+    setPage(1);
   }
 
   function updateForm(field, value) {
@@ -354,6 +382,7 @@ export default function Quotes() {
     setOperations([{ ...emptyOperation }]);
     setUploadedFiles([]);
     setDraftFileOwnerId(crypto.randomUUID());
+    setPage(1);
   }
 
   function convertToJob(item) {
@@ -374,6 +403,7 @@ export default function Quotes() {
       quoteTotal: item.totals?.grandTotal || 0,
       price: item.totals?.grandTotal || 0,
       operations: item.operations || [],
+      deadline: item.deadline || item.dueDate || item.deliveryDate || item.deliveryTime || "",
       status: "waiting",
       createdAt: new Date().toISOString(),
       period: item.period,
@@ -384,6 +414,7 @@ export default function Quotes() {
     };
 
     addJob(newJob);
+    window.dispatchEvent(new Event("forgeerp:jobs-updated"));
 
     const updatedQuotes = updateStoredQuote(item.id, {
       status: "İşe Çevrildi",
@@ -478,7 +509,7 @@ export default function Quotes() {
           return key;
         }
       } catch {
-        // JSON olmayan localStorage kayıtlarını geç.
+        // geç
       }
     }
 
@@ -527,15 +558,19 @@ export default function Quotes() {
     }
   }
 
-
   return (
-    <div className="min-h-screen bg-slate-50 p-5 text-slate-900">
-      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-950">Teklifler</h1>
-          <p className="mt-1 text-sm font-semibold text-slate-500">
-            Ölçülü malzeme hesabı, CRM bağlantısı, operasyon maliyeti ve teklif arşivi
-          </p>
+    <div className="min-h-screen bg-[#f6f8fb] p-5 text-slate-900">
+      <div className="mb-5 flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-200">
+            <FileText size={26} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-slate-950">Teklifler</h1>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              Ölçülü malzeme hesabı, CRM bağlantısı, operasyon maliyeti ve teklif arşivi
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -545,7 +580,7 @@ export default function Quotes() {
           <select
             value={activePeriod.periodKey}
             onChange={(e) => changePeriod(e.target.value)}
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black shadow-sm outline-none"
+            className="h-14 rounded-3xl border border-slate-200 bg-white px-5 text-sm font-black shadow-sm outline-none"
           >
             {periods.map((p) => (
               <option key={p.periodKey} value={p.periodKey}>
@@ -556,13 +591,13 @@ export default function Quotes() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_330px]">
-        <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
+        <div className="space-y-5">
           <section className="panel">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between">
               <h2>Teklif Bilgileri</h2>
-              <button onClick={() => setShowCustomerPanel(true)} className="btn-light text-blue-700">
-                <UserPlus size={14} /> Yeni Müşteri
+              <button onClick={() => setShowCustomerPanel(true)} className="btn-purple">
+                <UserPlus size={15} /> Yeni Müşteri
               </button>
             </div>
 
@@ -606,7 +641,7 @@ export default function Quotes() {
             </div>
 
             {quote.customer && (
-              <div className="mt-3 grid grid-cols-1 gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-2 rounded-3xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-3">
                 <SmallInfo icon={<UserPlus size={14} />} value={safe(quote.customerAuthorized)} />
                 <SmallInfo icon={<Phone size={14} />} value={safe(quote.customerPhone)} />
                 <SmallInfo icon={<Mail size={14} />} value={safe(quote.customerEmail)} />
@@ -619,12 +654,14 @@ export default function Quotes() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <TypeButton
                 active={quote.quoteType === "İşçilik"}
+                icon={<Wrench size={24} />}
                 title="İşçilik"
                 desc="Sadece işçilik maliyetini hesapla"
                 onClick={() => updateForm("quoteType", "İşçilik")}
               />
               <TypeButton
                 active={quote.quoteType === "İşçilik + Malzeme"}
+                icon={<Package size={24} />}
                 title="İşçilik + Malzeme"
                 desc="İşçilik ve malzeme maliyetini birlikte hesapla"
                 onClick={() => updateForm("quoteType", "İşçilik + Malzeme")}
@@ -636,7 +673,7 @@ export default function Quotes() {
             <section className="panel">
               <div className="mb-3 flex items-center justify-between">
                 <h2>Malzeme Ölçü Hesabı</h2>
-                <div className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-black text-white">
+                <div className="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-black text-white">
                   {totals.materialWeight.toFixed(2)} kg
                 </div>
               </div>
@@ -668,13 +705,13 @@ export default function Quotes() {
           <section className="panel">
             <div className="mb-3 flex items-center justify-between">
               <h2>Operasyonlar</h2>
-              <button onClick={() => setOperations([...operations, { ...emptyOperation }])} className="btn-dark">
-                + Operasyon Ekle
+              <button onClick={() => setOperations([...operations, { ...emptyOperation }])} className="btn-purple">
+                <Plus size={15} /> Operasyon Ekle
               </button>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200">
-              <div className="grid grid-cols-[1.2fr_1fr_0.8fr_1fr_0.7fr_44px] bg-slate-50 px-3 py-2 text-[11px] font-black uppercase text-slate-400">
+            <div className="overflow-hidden rounded-3xl border border-slate-200">
+              <div className="grid grid-cols-[1.2fr_1fr_0.8fr_1fr_0.7fr_44px] bg-slate-50 px-4 py-3 text-[11px] font-black uppercase text-slate-400">
                 <span>Operasyon</span>
                 <span>Makine</span>
                 <span>Saat</span>
@@ -692,80 +729,72 @@ export default function Quotes() {
                   <input type="number" value={op.hours} onChange={(e) => updateOperation(index, "hours", e.target.value)} className="input" />
                   <input type="number" value={op.hourlyRate} onChange={(e) => updateOperation(index, "hourlyRate", e.target.value)} className="input" />
                   <b className="text-right text-sm">{currency(toNumber(op.hours) * toNumber(op.hourlyRate))}</b>
-                  <button onClick={() => removeOperation(index)} className="rounded-xl border border-red-100 bg-red-50 p-2 text-red-600 hover:bg-red-100">
+                  <button onClick={() => removeOperation(index)} className="rounded-2xl border border-red-100 bg-red-50 p-2 text-red-600 hover:bg-red-100">
                     <Trash2 size={15} />
                   </button>
                 </div>
               ))}
 
-              <div className="grid grid-cols-2 border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm font-black">
-                <span>Toplam Operasyon Saati: {totals.operationHours} Saat</span>
-                <span className="text-right">Toplam İşçilik Tutarı: {currency(totals.operationTotal)}</span>
+              <div className="grid grid-cols-3 gap-3 border-t border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 px-5 py-4 text-sm font-black">
+                <MiniTotal label="Toplam Operasyon" value={operations.length} />
+                <MiniTotal label="Toplam Operasyon Saati" value={`${totals.operationHours} Saat`} />
+                <MiniTotal label="Toplam İşçilik Tutarı" value={currency(totals.operationTotal)} />
               </div>
             </div>
           </section>
 
           <section className="panel">
             <h2>Ek Bilgiler</h2>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <Input label="Ek Maliyet" type="number" value={quote.extraCost} onChange={(v) => updateForm("extraCost", v)} />
               <Input label="Kâr Oranı %" type="number" value={quote.profitRate} onChange={(v) => updateForm("profitRate", v)} />
+              <Input label="Not" value={quote.note} onChange={(v) => updateForm("note", v)} />
             </div>
           </section>
 
           <section className="panel">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h2>Kayıtlı Teklifler</h2>
-              <div className="relative w-80 max-w-full">
+              <div className="relative w-full md:w-80">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  value={quoteSearch}
+                  onChange={(e) => {
+                    setQuoteSearch(e.target.value);
+                    setPage(1);
+                  }}
                   className="input pl-9"
-                  placeholder="Müşteri ara..."
+                  placeholder="Teklif ara..."
                 />
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50 text-left text-[11px] uppercase text-slate-500">
-                    <th className="p-3">No</th>
-                    <th className="p-3">Müşteri</th>
-                    <th className="p-3">İş / Parça Adı</th>
-                    <th className="p-3">Tür</th>
-                    <th className="p-3">Toplam</th>
-                    <th className="p-3">Tarih</th>
-                    <th className="p-3">Durum</th>
-                    <th className="p-3">İşlem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {periodQuotes.length === 0 ? (
-                    <tr><td colSpan="8" className="p-10 text-center text-slate-400">Bu dönemde kayıtlı teklif yok.</td></tr>
-                  ) : periodQuotes.map((item) => (
-                    <tr key={item.id} className="border-b hover:bg-slate-50">
-                      <td className="p-3 font-black">{item.id}</td>
-                      <td className="p-3">{safe(item.customer)}</td>
-                      <td className="p-3">{safe(item.title)}</td>
-                      <td className="p-3">{safe(item.quoteType)}</td>
-                      <td className="p-3 font-black">{currency(item.totals?.grandTotal)}</td>
-                      <td className="p-3">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("tr-TR") : "—"}</td>
-                      <td className="p-3"><span className={`rounded-full border px-2 py-1 text-xs font-black ${statusBadge(item.status)}`}>{safe(item.status)}</span></td>
-                      <td className="p-3">
-                        <div className="flex gap-2">
-                          <button onClick={() => setSelectedQuote(item)} className="icon-btn"><Eye size={15} /></button>
-                          <button onClick={() => printQuote(item)} className="icon-btn"><FileText size={15} /></button>
-                          <button onClick={() => convertToJob(item)} disabled={item.status === "İşe Çevrildi"} className="btn-dark disabled:bg-slate-300">İşe Çevir</button>
-                          <button onClick={() => deleteSavedQuote(item)} className="icon-btn-danger"><Trash2 size={15} /></button>
-                        </div>
-                      </td>
-                    </tr>
+            {searchedQuotes.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-bold text-slate-400">
+                Bu dönemde kayıtlı teklif yok.
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-3">
+                  {pagedQuotes.map((item) => (
+                    <QuoteCard
+                      key={item.id}
+                      item={item}
+                      onView={() => setSelectedQuote(item)}
+                      onPrint={() => printQuote(item)}
+                      onConvert={() => convertToJob(item)}
+                      onDelete={() => deleteSavedQuote(item)}
+                    />
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPage={(nextPage) => setPage(nextPage)}
+                />
+              </>
+            )}
           </section>
         </div>
 
@@ -778,18 +807,18 @@ export default function Quotes() {
             <Summary label="Ek Maliyet" value={currency(totals.extraCost)} />
             <Summary label="Kâr" value={currency(totals.profit)} />
 
-            <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50 p-4">
               <p className="text-xs font-black text-blue-600">Toplam Teklif Tutarı</p>
               <h3 className="mt-1 text-3xl font-black text-blue-700">{currency(totals.grandTotal)}</h3>
             </div>
 
             <Summary label="KDV (%20)" value={currency(totals.vat)} />
-            <div className="mt-2 flex justify-between rounded-2xl bg-emerald-50 p-3 text-sm font-black text-emerald-700">
+            <div className="mt-2 flex justify-between rounded-3xl bg-emerald-50 p-4 text-sm font-black text-emerald-700">
               <span>Genel Toplam</span>
               <span>{currency(totals.totalWithVat)}</span>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -802,7 +831,7 @@ export default function Quotes() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-28 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                className="flex h-32 w-full flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
               >
                 <Upload size={30} />
                 <span className="mt-2 text-sm font-black">Parça Görseli / Dosya Yükle</span>
@@ -826,7 +855,7 @@ export default function Quotes() {
               )}
             </div>
 
-            <button onClick={saveQuote} className="mt-4 h-11 w-full rounded-2xl bg-emerald-600 text-sm font-black text-white hover:bg-emerald-700">
+            <button onClick={saveQuote} className="mt-4 h-12 w-full rounded-3xl bg-gradient-to-r from-blue-600 to-violet-600 text-sm font-black text-white shadow-lg shadow-blue-100 hover:from-blue-700 hover:to-violet-700">
               Teklifi Kaydet
             </button>
             <button
@@ -844,7 +873,7 @@ export default function Quotes() {
                   year: activePeriod.year,
                 })
               }
-              className="mt-3 h-11 w-full rounded-2xl border border-slate-200 bg-white text-sm font-black text-slate-700 hover:bg-slate-50"
+              className="mt-3 h-12 w-full rounded-3xl border border-slate-200 bg-white text-sm font-black text-slate-700 hover:bg-slate-50"
             >
               PDF Oluştur
             </button>
@@ -853,43 +882,17 @@ export default function Quotes() {
       </div>
 
       {selectedQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div>
-                <p className="text-xs font-black text-slate-400">TEKLİF DETAYI</p>
-                <h2 className="mt-1 text-2xl font-black">{selectedQuote.id}</h2>
-                <p className="text-sm text-slate-500">{safe(selectedQuote.customer)} / {safe(selectedQuote.title)}</p>
-              </div>
-              <button onClick={() => setSelectedQuote(null)} className="rounded-2xl bg-slate-100 p-2 hover:bg-slate-200">×</button>
-            </div>
-            <div className="grid grid-cols-3 gap-3 py-4">
-              <Detail label="Toplam" value={currency(selectedQuote.totals?.grandTotal)} />
-              <Detail label="Ağırlık" value={`${Number(selectedQuote.calculatedWeight || 0).toFixed(2)} kg`} />
-              <Detail label="Dosya" value={`${getQuoteFiles(selectedQuote).length} adet`} />
-            </div>
-
-            {getQuoteFiles(selectedQuote).length > 0 && (
-              <div className="mb-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                {getQuoteFiles(selectedQuote).map((file) => (
-                  <FilePreview
-                    key={file.id}
-                    file={file}
-                    onOpen={() => openUploadedFile(file)}
-                    onDownload={() => downloadUploadedFile(file)}
-                    onDelete={() => removeQuoteFile(file.id, selectedQuote)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-              <button onClick={() => printQuote(selectedQuote)} className="btn-light">PDF / Yazdır</button>
-              <button onClick={() => convertToJob(selectedQuote)} disabled={selectedQuote.status === "İşe Çevrildi"} className="btn-dark disabled:bg-slate-300">İşe Çevir</button>
-              <button onClick={() => deleteSavedQuote(selectedQuote)} className="btn-danger">Teklifi Sil</button>
-            </div>
-          </div>
-        </div>
+        <QuoteModal
+          quote={selectedQuote}
+          files={getQuoteFiles(selectedQuote)}
+          onClose={() => setSelectedQuote(null)}
+          onPrint={() => printQuote(selectedQuote)}
+          onConvert={() => convertToJob(selectedQuote)}
+          onDelete={() => deleteSavedQuote(selectedQuote)}
+          onOpenFile={openUploadedFile}
+          onDownloadFile={downloadUploadedFile}
+          onDeleteFile={(fileId) => removeQuoteFile(fileId, selectedQuote)}
+        />
       )}
 
       {showCustomerPanel && (
@@ -900,7 +903,9 @@ export default function Quotes() {
                 <p className="text-xs font-black text-slate-400">CRM</p>
                 <h2 className="text-2xl font-black">Yeni Müşteri</h2>
               </div>
-              <button type="button" onClick={() => setShowCustomerPanel(false)} className="rounded-2xl bg-slate-100 p-2"><Trash2 size={16} /></button>
+              <button type="button" onClick={() => setShowCustomerPanel(false)} className="rounded-2xl bg-slate-100 p-2">
+                ×
+              </button>
             </div>
             <div className="space-y-3">
               <Input required label="Firma Adı" value={newCustomer.name} onChange={(v) => setNewCustomer({ ...newCustomer, name: v })} />
@@ -916,19 +921,167 @@ export default function Quotes() {
       )}
 
       <style>{`
-        .panel { border: 1px solid #e2e8f0; background: white; border-radius: 22px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
-        .panel h2 { font-size: 16px; font-weight: 900; margin-bottom: 10px; color: #0f172a; }
-        .input { width: 100%; height: 42px; border: 1px solid #e2e8f0; border-radius: 14px; padding: 0 12px; font-size: 13px; font-weight: 700; outline: none; background: white; }
-        .input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10); }
-        .btn-dark { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 12px; background: #0f172a; color: white; padding: 8px 12px; font-size: 12px; font-weight: 900; }
-        .btn-light { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 12px; background: white; border: 1px solid #e2e8f0; color: #334155; padding: 8px 12px; font-size: 12px; font-weight: 900; }
-        .icon-btn { display: inline-flex; height: 34px; width: 34px; align-items: center; justify-content: center; border-radius: 12px; border: 1px solid #e2e8f0; color: #2563eb; background: white; }
+        .panel { border: 1px solid #e2e8f0; background: white; border-radius: 28px; padding: 18px; box-shadow: 0 14px 35px rgba(15, 23, 42, 0.04); }
+        .panel h2 { font-size: 16px; font-weight: 950; margin-bottom: 10px; color: #0f172a; }
+        .input { width: 100%; height: 44px; border: 1px solid #dbe3ef; border-radius: 16px; padding: 0 14px; font-size: 13px; font-weight: 800; outline: none; background: white; }
+        .input:focus { border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.10); }
+        .btn-purple { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 16px; background: linear-gradient(135deg, #2563eb, #6d28d9); color: white; padding: 10px 14px; font-size: 12px; font-weight: 950; box-shadow: 0 14px 28px rgba(79, 70, 229, 0.20); transition: 0.15s ease; }
+        .btn-purple:hover { transform: translateY(-1px); }
+        .btn-convert { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 14px; background: #0f172a; color: white; padding: 9px 14px; font-size: 12px; font-weight: 950; transition: 0.15s ease; white-space: nowrap; }
+        .btn-convert:hover { background: #020617; transform: translateY(-1px); }
+        .btn-convert:disabled { cursor: not-allowed; background: #cbd5e1; transform: none; }
+        .icon-btn { display: inline-flex; height: 36px; width: 36px; align-items: center; justify-content: center; border-radius: 14px; border: 1px solid #e2e8f0; color: #2563eb; background: white; }
         .icon-btn:hover { background: #eff6ff; }
-        .icon-btn-danger { display: inline-flex; height: 34px; width: 34px; align-items: center; justify-content: center; border-radius: 12px; border: 1px solid #fee2e2; color: #dc2626; background: #fff; }
+        .icon-btn-danger { display: inline-flex; height: 36px; width: 36px; align-items: center; justify-content: center; border-radius: 14px; border: 1px solid #fee2e2; color: #dc2626; background: white; }
         .icon-btn-danger:hover { background: #fef2f2; }
-        .btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 12px; background: #fef2f2; border: 1px solid #fee2e2; color: #dc2626; padding: 8px 12px; font-size: 12px; font-weight: 900; }
-        .btn-danger:hover { background: #fee2e2; }
       `}</style>
+    </div>
+  );
+}
+
+function QuoteCard({ item, onView, onPrint, onConvert, onDelete }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_0.7fr_0.7fr_190px] lg:items-center">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-2xl bg-slate-950 px-3 py-1 text-xs font-black text-white">
+              {safe(item.id)}
+            </span>
+            <span className={`rounded-full border px-3 py-1 text-xs font-black ${statusBadge(item.status)}`}>
+              {safe(item.status)}
+            </span>
+          </div>
+          <p className="mt-3 font-black text-slate-950">{safe(item.customer)}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">
+            {item.createdAt ? new Date(item.createdAt).toLocaleDateString("tr-TR") : "—"}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs font-black uppercase text-slate-400">İş / Parça</p>
+          <p className="mt-1 font-black text-slate-900">{safe(item.title)}</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">{safe(item.quoteType)}</p>
+        </div>
+
+        <div>
+          <p className="text-xs font-black uppercase text-slate-400">Toplam</p>
+          <p className="mt-1 text-lg font-black text-slate-950">{currency(item.totals?.grandTotal)}</p>
+        </div>
+
+        <div>
+          <p className="text-xs font-black uppercase text-slate-400">Dosya</p>
+          <p className="mt-1 font-black text-slate-900">{item.fileCount || 0} adet</p>
+        </div>
+
+        <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+          <button onClick={onView} className="icon-btn"><Eye size={15} /></button>
+          <button onClick={onPrint} className="icon-btn"><FileText size={15} /></button>
+          <button onClick={onConvert} disabled={item.status === "İşe Çevrildi"} className="btn-convert disabled:bg-slate-300">
+            İşe Çevir
+          </button>
+          <button onClick={onDelete} className="icon-btn-danger"><Trash2 size={15} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages, onPage }) {
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+
+  return (
+    <div className="mt-5 flex items-center justify-center gap-2">
+      <button
+        onClick={() => onPage(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40"
+      >
+        <ChevronLeft size={18} />
+      </button>
+
+      {pages.map((p) => (
+        <button
+          key={p}
+          onClick={() => onPage(p)}
+          className={`h-10 min-w-10 rounded-2xl px-4 text-sm font-black ${
+            page === p
+              ? "bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-100"
+              : "border border-slate-200 bg-white text-slate-600"
+          }`}
+        >
+          {p}
+        </button>
+      ))}
+
+      <button
+        onClick={() => onPage(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40"
+      >
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  );
+}
+
+function QuoteModal({
+  quote,
+  files,
+  onClose,
+  onPrint,
+  onConvert,
+  onDelete,
+  onOpenFile,
+  onDownloadFile,
+  onDeleteFile,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-3xl bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-xs font-black text-slate-400">TEKLİF DETAYI</p>
+            <h2 className="mt-1 text-2xl font-black">{quote.id}</h2>
+            <p className="text-sm text-slate-500">{safe(quote.customer)} / {safe(quote.title)}</p>
+          </div>
+          <button onClick={onClose} className="rounded-2xl bg-slate-100 px-3 py-2 hover:bg-slate-200">
+            ×
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 py-4">
+          <Detail label="Toplam" value={currency(quote.totals?.grandTotal)} />
+          <Detail label="Ağırlık" value={`${Number(quote.calculatedWeight || 0).toFixed(2)} kg`} />
+          <Detail label="Dosya" value={`${files.length} adet`} />
+        </div>
+
+        {files.length > 0 && (
+          <div className="mb-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+            {files.map((file) => (
+              <FilePreview
+                key={file.id}
+                file={file}
+                onOpen={() => onOpenFile(file)}
+                onDownload={() => onDownloadFile(file)}
+                onDelete={() => onDeleteFile(file.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <button onClick={onPrint} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black">
+            PDF / Yazdır
+          </button>
+          <button onClick={onConvert} disabled={quote.status === "İşe Çevrildi"} className="btn-convert disabled:bg-slate-300">
+            İşe Çevir
+          </button>
+          <button onClick={onDelete} className="rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-600">
+            Sil
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -942,14 +1095,9 @@ function FilePreview({ file, onOpen, onDownload, onDelete }) {
         type="button"
         onClick={onOpen}
         className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 hover:ring-2 hover:ring-blue-100"
-        title="Dosyayı aç"
       >
         {image ? (
-          <img
-            src={file.dataUrl}
-            alt={file.name}
-            className="h-full w-full object-cover"
-          />
+          <img src={file.dataUrl} alt={file.name} className="h-full w-full object-cover" />
         ) : (
           <FileText size={20} className="text-slate-400" />
         )}
@@ -963,21 +1111,13 @@ function FilePreview({ file, onOpen, onDownload, onDelete }) {
       </div>
 
       {onOpen && (
-        <button
-          type="button"
-          onClick={onOpen}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-blue-600 hover:bg-blue-50"
-        >
+        <button type="button" onClick={onOpen} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-blue-600 hover:bg-blue-50">
           Aç
         </button>
       )}
 
       {onDownload && (
-        <button
-          type="button"
-          onClick={onDownload}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-        >
+        <button type="button" onClick={onDownload} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50">
           <span className="inline-flex items-center gap-1">
             <Download size={13} /> İndir
           </span>
@@ -985,11 +1125,7 @@ function FilePreview({ file, onOpen, onDownload, onDelete }) {
       )}
 
       {onDelete && (
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-xl p-2 text-red-500 hover:bg-red-50"
-        >
+        <button type="button" onClick={onDelete} className="rounded-xl p-2 text-red-500 hover:bg-red-50">
           <Trash2 size={15} />
         </button>
       )}
@@ -1005,6 +1141,15 @@ function MiniStat({ icon, title, value }) {
         <p className="text-xs font-bold text-slate-500">{title}</p>
         <p className="text-xl font-black text-slate-950">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function MiniTotal({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-white/70 p-3">
+      <p className="text-xs font-black text-slate-400">{label}</p>
+      <p className="mt-1 text-base font-black text-slate-950">{value}</p>
     </div>
   );
 }
@@ -1040,18 +1185,34 @@ function SmallInfo({ icon, value }) {
   return <div className="flex items-center gap-2 text-xs font-black text-slate-600">{icon}{value}</div>;
 }
 
-function TypeButton({ active, title, desc, onClick }) {
+function TypeButton({ active, icon, title, desc, onClick }) {
   return (
-    <button onClick={onClick} className={`rounded-2xl border p-4 text-left transition ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
-      <p className="font-black">{title}</p>
-      <p className={`mt-1 text-xs font-semibold ${active ? "text-slate-300" : "text-slate-500"}`}>{desc}</p>
+    <button
+      onClick={onClick}
+      className={`rounded-3xl border p-4 text-left transition ${
+        active
+          ? "border-violet-300 bg-gradient-to-br from-white to-violet-50 text-blue-700 ring-2 ring-violet-100"
+          : "border-slate-200 bg-white hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+          active ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-100" : "bg-slate-50 text-slate-500"
+        }`}>
+          {icon}
+        </div>
+        <div>
+          <p className="font-black">{title}</p>
+          <p className={`mt-1 text-xs font-semibold ${active ? "text-blue-600" : "text-slate-500"}`}>{desc}</p>
+        </div>
+      </div>
     </button>
   );
 }
 
 function Summary({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-slate-100 py-2.5 text-sm">
+    <div className="flex justify-between border-b border-slate-100 py-3 text-sm">
       <span className="font-semibold text-slate-500">{label}</span>
       <b>{value}</b>
     </div>
