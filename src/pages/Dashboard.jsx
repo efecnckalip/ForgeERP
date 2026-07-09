@@ -184,12 +184,16 @@ export default function Dashboard({ setActivePage }) {
       page: "İş Takibi",
     })),
   ].slice(-8).reverse();
-
+const company = JSON.parse(localStorage.getItem("forge_company") || "{}");
+const userName =
+  company.authorized?.trim() ||
+  company.name?.trim() ||
+  "Kullanıcı";
   return (
     <div className="min-h-screen bg-[#f7f9fc] p-5 text-slate-900">
       <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">Merhaba, Yasin 👋</h1>
+          <h1 className="text-3xl font-black tracking-tight">Merhaba {userName}  👋</h1>
           <p className="mt-1 text-sm text-slate-500">
             ForgeERP kontrol merkezi, tüm süreçlerin tek ekranında.
           </p>
@@ -268,8 +272,8 @@ export default function Dashboard({ setActivePage }) {
       </header>
 
       <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <TopCard title="Bugün Bize Ödenecekler" value={money(stats.todayReceivable)} sub="Tahsilat" icon={CircleDollarSign} color="green" onClick={() => go("Finans")} />
-        <TopCard title="Bugün Bizim Ödeyeceklerimiz" value={money(stats.todayPayable)} sub="Ödeme" icon={Wallet} color="blue" onClick={() => go("Finans")} />
+        <TopCard title="GÜNLÜK ALACAK" value={money(stats.todayReceivable)} sub="Tahsilat" icon={CircleDollarSign} color="green" onClick={() => go("Finans")} />
+        <TopCard title="GÜNLÜK BORÇ" value={money(stats.todayPayable)} sub="Ödeme" icon={Wallet} color="blue" onClick={() => go("Finans")} />
         <TopCard title="Vadesi Geçen Tahsilatlar" value={money(stats.overdueReceivableTotal)} sub={`${stats.overdueReceivables.length} kayıt`} icon={AlertTriangle} color="red" onClick={() => go("Finans")} />
         <TopCard title="Vadesi Geçen Borçlar" value={money(stats.overduePayableTotal)} sub={`${stats.overduePayables.length} kayıt`} icon={AlertTriangle} color="orange" onClick={() => go("Finans")} />
         <TopCard title="Güncel Kasa Bakiyesi" value={money(stats.cash)} sub="Kasa" icon={Wallet} color="purple" onClick={() => go("Finans")} />

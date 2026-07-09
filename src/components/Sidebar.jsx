@@ -55,7 +55,7 @@ function Sidebar({ activePage, setActivePage }) {
 
         <div style={styles.machineRow}>
           <Gauge size={17} />
-          <span>AWEA BM1200</span>
+          <span>Sistem</span>
           <strong>Hazır</strong>
         </div>
       </div>

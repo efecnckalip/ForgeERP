@@ -1,12 +1,12 @@
 // ForgeERP Document Engine 2.0
 // Quote + Premium Delivery Note
 
-const COMPANY_STORAGE_KEY = "forge_company_profile";
+const COMPANY_STORAGE_KEY = "forge_company";
 
 const DEFAULT_COMPANY = {
   name: "Firma Ünvanı",
   subtitle: "ForgeERP by EFE CNC",
-  slogan: "Kalıp • CNC İşleme • Tersine Mühendislik • Kalite Kontrol",
+  slogan: "Üretim • Teklif • Stok • Finans Yönetimi",
   address: "",
   phone: "",
   email: "",
@@ -15,7 +15,9 @@ const DEFAULT_COMPANY = {
   taxNumber: "",
   mersisNo: "",
   iban: "",
+  logo: "",
   logoUrl: "",
+  authorized: "",
   footer: "Bu belge ForgeERP Document Engine 2.0 ile oluşturulmuştur.",
 };
 
@@ -66,9 +68,7 @@ function openDocument(html) {
 function baseStyle() {
   return `
     <style>
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
@@ -93,7 +93,7 @@ function baseStyle() {
         color: white;
         padding: 28px;
         display: grid;
-        grid-template-columns: 1.3fr 0.8fr;
+        grid-template-columns: 1.25fr 0.85fr;
         gap: 24px;
       }
 
@@ -161,9 +161,7 @@ function baseStyle() {
         color: rgba(255,255,255,0.75);
       }
 
-      .content {
-        padding: 28px;
-      }
+      .content { padding: 28px; }
 
       .grid-2 {
         display: grid;
@@ -184,9 +182,7 @@ function baseStyle() {
         background: #fff;
       }
 
-      .soft {
-        background: #f9fafb;
-      }
+      .soft { background: #f9fafb; }
 
       .card h3 {
         margin: 0 0 12px;
@@ -205,13 +201,9 @@ function baseStyle() {
         font-size: 12px;
       }
 
-      .row:last-child {
-        border-bottom: 0;
-      }
+      .row:last-child { border-bottom: 0; }
 
-      .row span {
-        color: #6b7280;
-      }
+      .row span { color: #6b7280; }
 
       .row b {
         text-align: right;
@@ -243,9 +235,7 @@ function baseStyle() {
         vertical-align: top;
       }
 
-      tbody tr:nth-child(even) {
-        background: #f9fafb;
-      }
+      tbody tr:nth-child(even) { background: #f9fafb; }
 
       .summary {
         width: 320px;
@@ -302,22 +292,8 @@ function baseStyle() {
         line-height: 1.5;
       }
 
-      .badge {
-        display: inline-block;
-        border-radius: 999px;
-        background: #f1f5f9;
-        padding: 6px 10px;
-        font-size: 11px;
-        font-weight: 800;
-        color: #334155;
-      }
-
       @media print {
-        body {
-          padding: 0;
-          background: white;
-        }
-
+        body { padding: 0; background: white; }
         .page {
           width: 100%;
           min-height: auto;
@@ -330,13 +306,15 @@ function baseStyle() {
 }
 
 function header(company, title, number, date) {
+  const logoSrc = company.logo || company.logoUrl || "";
+
   return `
     <div class="top">
       <div class="brand">
         <div class="logo">
           ${
-            company.logoUrl
-              ? `<img src="${company.logoUrl}" alt="${safe(company.name)}" />`
+            logoSrc
+              ? `<img src="${logoSrc}" alt="${safe(company.name)}" />`
               : `LOGO`
           }
         </div>
@@ -355,6 +333,21 @@ function header(company, title, number, date) {
         <p><b>No:</b> ${safe(number)}</p>
         <p><b>Tarih:</b> ${safe(date)}</p>
       </div>
+    </div>
+  `;
+}
+
+function companyInfoCard(company) {
+  return `
+    <div class="card soft">
+      <h3>Tedarikçi Bilgileri</h3>
+      <div class="row"><span>Firma</span><b>${safe(company.name)}</b></div>
+      <div class="row"><span>Yetkili</span><b>${safe(company.authorized)}</b></div>
+      <div class="row"><span>Telefon</span><b>${safe(company.phone)}</b></div>
+      <div class="row"><span>E-posta</span><b>${safe(company.email)}</b></div>
+      <div class="row"><span>Vergi Dairesi</span><b>${safe(company.taxOffice)}</b></div>
+      <div class="row"><span>Vergi No</span><b>${safe(company.taxNumber)}</b></div>
+      <div class="row"><span>Adres</span><b>${safe(company.address)}</b></div>
     </div>
   `;
 }
@@ -401,14 +394,21 @@ export function printQuoteDocument(quote) {
 
           <div class="content">
             <div class="grid-2">
+              ${companyInfoCard(company)}
+
               <div class="card">
                 <h3>Müşteri Bilgileri</h3>
                 <div class="row"><span>Firma</span><b>${safe(quote.customer)}</b></div>
-                <div class="row"><span>Yetkili</span><b>${safe(quote.contactName)}</b></div>
-                <div class="row"><span>Telefon</span><b>${safe(quote.phone)}</b></div>
-                <div class="row"><span>E-posta</span><b>${safe(quote.email)}</b></div>
+                <div class="row"><span>Yetkili</span><b>${safe(quote.customerAuthorized || quote.contactName)}</b></div>
+                <div class="row"><span>Telefon</span><b>${safe(quote.customerPhone || quote.phone)}</b></div>
+                <div class="row"><span>E-posta</span><b>${safe(quote.customerEmail || quote.email)}</b></div>
+                <div class="row"><span>Vergi Dairesi</span><b>${safe(quote.customerTaxOffice)}</b></div>
+                <div class="row"><span>Vergi No</span><b>${safe(quote.customerTaxNo)}</b></div>
+                <div class="row"><span>Adres</span><b>${safe(quote.customerAddress)}</b></div>
               </div>
+            </div>
 
+            <div class="grid-2" style="margin-top:14px;">
               <div class="card">
                 <h3>Parça / İş Bilgileri</h3>
                 <div class="row"><span>İş / Parça</span><b>${safe(quote.title)}</b></div>
@@ -416,6 +416,15 @@ export function printQuoteDocument(quote) {
                 <div class="row"><span>Malzeme</span><b>${safe(quote.material)}</b></div>
                 <div class="row"><span>Malzeme Tipi</span><b>${safe(quote.materialType)}</b></div>
                 <div class="row"><span>Ağırlık</span><b>${Number(quote.calculatedWeight || totals.materialWeight || 0).toFixed(2)} kg</b></div>
+              </div>
+
+              <div class="card">
+                <h3>Teklif Detayı</h3>
+                <div class="row"><span>Oluşturma Tarihi</span><b>${quote.createdAt ? new Date(quote.createdAt).toLocaleDateString("tr-TR") : today()}</b></div>
+                <div class="row"><span>Dönem</span><b>${safe(quote.monthName)} ${safe(quote.year)}</b></div>
+                <div class="row"><span>Teslim Süresi</span><b>${safe(quote.deliveryTime)}</b></div>
+                <div class="row"><span>Ödeme Şartı</span><b>${safe(quote.paymentTerm)}</b></div>
+                <div class="row"><span>Durum</span><b>${safe(quote.status || "Taslak")}</b></div>
               </div>
             </div>
 
@@ -425,6 +434,7 @@ export function printQuoteDocument(quote) {
                 <thead>
                   <tr>
                     <th>Operasyon</th>
+                    <th>Makine</th>
                     <th>Saat</th>
                     <th>Saatlik</th>
                     <th>Tutar</th>
@@ -438,6 +448,7 @@ export function printQuoteDocument(quote) {
                             (op) => `
                               <tr>
                                 <td>${safe(op.name)}</td>
+                                <td>${safe(op.machine)}</td>
                                 <td>${safe(op.hours)}</td>
                                 <td>${money(op.hourlyRate)}</td>
                                 <td>${money(Number(op.hours || 0) * Number(op.hourlyRate || 0))}</td>
@@ -445,7 +456,7 @@ export function printQuoteDocument(quote) {
                             `
                           )
                           .join("")
-                      : `<tr><td colspan="4">Operasyon bulunmuyor.</td></tr>`
+                      : `<tr><td colspan="5">Operasyon bulunmuyor.</td></tr>`
                   }
                 </tbody>
               </table>
@@ -479,7 +490,7 @@ export function printQuoteDocument(quote) {
 
               <div class="sign">
                 <b>Kaşe / İmza</b>
-                <span>Yetkili onayı</span>
+                <span>${safe(company.authorized || "Yetkili onayı")}</span>
               </div>
             </div>
 
@@ -520,14 +531,19 @@ export function printDeliveryNoteDocument(job) {
           ${header(company, "SEVK FORMU", deliveryNo, today())}
 
           <div class="content">
-            <div class="grid-3">
-              <div class="card soft">
-                <h3>Müşteri</h3>
-                <div class="row"><span>Firma</span><b>${safe(job.customer)}</b></div>
-                <div class="row"><span>Yetkili</span><b>${safe(job.contactName)}</b></div>
-                <div class="row"><span>Telefon</span><b>${safe(job.customerPhone || job.phone)}</b></div>
-              </div>
+            <div class="grid-2">
+              ${companyInfoCard(company)}
 
+              <div class="card soft">
+                <h3>Müşteri / Alıcı</h3>
+                <div class="row"><span>Firma</span><b>${safe(job.customer)}</b></div>
+                <div class="row"><span>Yetkili</span><b>${safe(job.customerAuthorized || job.contactName)}</b></div>
+                <div class="row"><span>Telefon</span><b>${safe(job.customerPhone || job.phone)}</b></div>
+                <div class="row"><span>Adres</span><b>${safe(job.customerAddress || job.address)}</b></div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-top:14px;">
               <div class="card soft">
                 <h3>İş Bağlantısı</h3>
                 <div class="row"><span>İş No</span><b>${safe(job.jobNo || job.id)}</b></div>
@@ -540,19 +556,6 @@ export function printDeliveryNoteDocument(job) {
                 <div class="row"><span>Tip</span><b>${safe(job.deliveryType || "Standart Sevk")}</b></div>
                 <div class="row"><span>Plaka</span><b>${safe(job.vehiclePlate)}</b></div>
                 <div class="row"><span>Şoför</span><b>${safe(job.driverName)}</b></div>
-              </div>
-            </div>
-
-            <div class="grid-2" style="margin-top:14px;">
-              <div class="card">
-                <h3>Alıcı Adresi</h3>
-                <div class="note">${safe(job.customerAddress || job.address)}</div>
-              </div>
-
-              <div class="card">
-                <h3>Teslim Bilgileri</h3>
-                <div class="row"><span>Teslim Eden</span><b>${safe(company.name)}</b></div>
-                <div class="row"><span>Teslim Alan</span><b>${safe(job.receiverName)}</b></div>
                 <div class="row"><span>Tarih</span><b>${today()}</b></div>
               </div>
             </div>
@@ -606,7 +609,7 @@ export function printDeliveryNoteDocument(job) {
             <div class="signatures">
               <div class="sign">
                 <b>Teslim Eden</b>
-                <span>Kaşe / İmza</span>
+                <span>${safe(company.name)}</span>
               </div>
               <div class="sign">
                 <b>Teslim Alan</b>
