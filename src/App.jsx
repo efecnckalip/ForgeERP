@@ -28,7 +28,7 @@ export default function App() {
   const renderPage = () => {
     switch (activePage) {
       case "Dashboard":
-        return <Dashboard />;
+        return <Dashboard setActivePage={setActivePage} />;
 
       case "İş Takibi":
         return <Jobs />;

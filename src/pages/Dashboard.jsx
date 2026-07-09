@@ -5,20 +5,16 @@ import {
   Bell,
   BriefcaseBusiness,
   CalendarDays,
-  CheckCircle2,
   CircleDollarSign,
   Clock,
   FileText,
   Plus,
   ShoppingCart,
   Wallet,
-  Wrench,
-  BarChart3,
   Zap,
 } from "lucide-react";
 
-const today = new Date();
-const todayISO = today.toISOString().slice(0, 10);
+const todayISO = new Date().toISOString().slice(0, 10);
 
 const readLS = (key, fallback = []) => {
   try {
@@ -40,13 +36,8 @@ const isToday = (d) => d && String(d).slice(0, 10) === todayISO;
 const isPast = (d) => d && String(d).slice(0, 10) < todayISO;
 
 export default function Dashboard({ setActivePage }) {
-  const [calendarMode, setCalendarMode] = useState("Hafta");
-  const [rates, setRates] = useState({
-    loading: true,
-    usd: null,
-    eur: null,
-    gold: null,
-  });
+  const [rates, setRates] = useState({ loading: true, usd: null, eur: null, gold: null });
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const go = (page) => {
     if (typeof setActivePage === "function") setActivePage(page);
@@ -85,18 +76,12 @@ export default function Dashboard({ setActivePage }) {
     const jobs = readLS("forge_jobs", []);
     const quotes = readLS("forge_quotes", []);
     const purchases = readLS("forge_purchases", []);
-    const customers = readLS("forge_customers", []);
-    const finance = readLS("forge_finance", {
-      cash: 0,
-      receivables: [],
-      payables: [],
-    });
+    const finance = readLS("forge_finance", { cash: 0, receivables: [], payables: [] });
 
     return {
       jobs: Array.isArray(jobs) ? jobs : [],
       quotes: Array.isArray(quotes) ? quotes : [],
       purchases: Array.isArray(purchases) ? purchases : [],
-      customers: Array.isArray(customers) ? customers : [],
       finance: finance || {},
     };
   }, []);
@@ -118,6 +103,7 @@ export default function Dashboard({ setActivePage }) {
     const approvalQuotes = data.quotes.filter(
       (q) => q.status === "Onay Bekliyor" || q.status === "Müşteri Onayı"
     );
+
     const monthQuoteTotal = data.quotes
       .filter((q) => String(q.date || q.createdAt || "").slice(0, 7) === todayISO.slice(0, 7))
       .reduce((s, q) => s + Number(q.total || q.amount || q.price || 0), 0);
@@ -141,6 +127,7 @@ export default function Dashboard({ setActivePage }) {
     const overdueReceivables = receivables.filter(
       (x) => isPast(x.dueDate || x.date) && x.status !== "Ödendi"
     );
+
     const overduePayables = payables.filter(
       (x) => isPast(x.dueDate || x.date) && x.status !== "Ödendi"
     );
@@ -172,23 +159,31 @@ export default function Dashboard({ setActivePage }) {
     };
   }, [data]);
 
+  const notifications = [
+    { title: "Geciken İşler", value: stats.delayedJobs.length, page: "İş Takibi" },
+    { title: "Vadesi Geçen Tahsilatlar", value: stats.overdueReceivables.length, page: "Finans" },
+    { title: "Vadesi Geçen Borçlar", value: stats.overduePayables.length, page: "Finans" },
+    { title: "Bekleyen Teklifler", value: stats.pendingQuotes.length, page: "Teklifler" },
+    { title: "Teslim Alınmayan Siparişler", value: stats.notReceived.length, page: "Satın Alma" },
+  ].filter((x) => Number(x.value) > 0);
+
   const recent = [
     ...data.quotes.slice(-3).map((x) => ({
-      type: "Teklifler",
-      text: `Teklif kaydı - ${x.quoteNo || x.customer || "Yeni teklif"}`,
+      type: "Teklif",
+      text: x.quoteNo || x.customer || "Teklif kaydı",
       page: "Teklifler",
     })),
     ...data.purchases.slice(-3).map((x) => ({
       type: "Satın Alma",
-      text: `Satın alma kaydı - ${x.supplier || x.name || "Yeni sipariş"}`,
+      text: x.supplier || x.name || "Satın alma kaydı",
       page: "Satın Alma",
     })),
     ...data.jobs.slice(-3).map((x) => ({
       type: "İş Takibi",
-      text: `İş kaydı - ${x.jobNo || x.name || "Yeni iş"}`,
+      text: x.jobNo || x.name || x.jobName || "İş kaydı",
       page: "İş Takibi",
     })),
-  ].slice(-7).reverse();
+  ].slice(-8).reverse();
 
   return (
     <div className="min-h-screen bg-[#f7f9fc] p-5 text-slate-900">
@@ -213,20 +208,61 @@ export default function Dashboard({ setActivePage }) {
             </div>
           </div>
 
-          <button onClick={() => go("Risk")} className="relative rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <Bell size={20} />
-            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-black text-white">
-              3
-            </span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications((v) => !v)}
+              className="relative rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:bg-slate-50"
+            >
+              <Bell size={20} />
+              {notifications.length > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-black text-white">
+                  {notifications.length}
+                </span>
+              )}
+            </button>
+
+            {showNotifications && (
+              <div className="absolute right-0 z-20 mt-3 w-80 rounded-3xl border border-slate-200 bg-white p-4 shadow-xl">
+                <h3 className="mb-3 text-sm font-black">Bildirim Merkezi</h3>
+
+                {notifications.length ? (
+                  <div className="space-y-2">
+                    {notifications.map((n) => (
+                      <button
+                        key={n.title}
+                        onClick={() => go(n.page)}
+                        className="flex w-full items-center justify-between rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-blue-50"
+                      >
+                        <div>
+                          <p className="text-sm font-black">{n.title}</p>
+                          <p className="text-xs text-slate-500">{n.page}</p>
+                        </div>
+                        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black text-red-600">
+                          {n.value}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+                    Şu an kritik bildirim yok.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => go("Dashboard")}
             className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center shadow-sm"
           >
-            <p className="text-xs font-bold text-slate-500">9 Temmuz 2026</p>
-            <p className="text-xs text-slate-500">Çarşamba</p>
-            <p className="mt-1 text-xl font-black">14:30:25</p>
+            <p className="text-xs font-bold text-slate-500">{todayISO}</p>
+            <p className="mt-1 text-xl font-black">
+              {new Date().toLocaleTimeString("tr-TR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
           </button>
         </div>
       </header>
@@ -234,9 +270,9 @@ export default function Dashboard({ setActivePage }) {
       <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <TopCard title="Bugün Bize Ödenecekler" value={money(stats.todayReceivable)} sub="Tahsilat" icon={CircleDollarSign} color="green" onClick={() => go("Finans")} />
         <TopCard title="Bugün Bizim Ödeyeceklerimiz" value={money(stats.todayPayable)} sub="Ödeme" icon={Wallet} color="blue" onClick={() => go("Finans")} />
-        <TopCard title="Vadesi Geçen Tahsilatlar" value={money(stats.overdueReceivableTotal)} sub={`${stats.overdueReceivables.length} tahsilat`} icon={AlertTriangle} color="red" onClick={() => go("Finans")} />
-        <TopCard title="Vadesi Geçen Borçlar" value={money(stats.overduePayableTotal)} sub={`${stats.overduePayables.length} borç`} icon={AlertTriangle} color="orange" onClick={() => go("Finans")} />
-        <TopCard title="Güncel Kasa Bakiyesi" value={money(stats.cash)} sub="Kasa bakiyesi" icon={Wallet} color="purple" onClick={() => go("Finans")} />
+        <TopCard title="Vadesi Geçen Tahsilatlar" value={money(stats.overdueReceivableTotal)} sub={`${stats.overdueReceivables.length} kayıt`} icon={AlertTriangle} color="red" onClick={() => go("Finans")} />
+        <TopCard title="Vadesi Geçen Borçlar" value={money(stats.overduePayableTotal)} sub={`${stats.overduePayables.length} kayıt`} icon={AlertTriangle} color="orange" onClick={() => go("Finans")} />
+        <TopCard title="Güncel Kasa Bakiyesi" value={money(stats.cash)} sub="Kasa" icon={Wallet} color="purple" onClick={() => go("Finans")} />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -250,7 +286,7 @@ export default function Dashboard({ setActivePage }) {
               ["Aktif İşler", stats.activeJobs.length, "green"],
               ["Bekleyen İşler", stats.waitingJobs.length, "orange"],
               ["Geciken İşler", stats.delayedJobs.length, "red"],
-              ["Bugün Teslim Edilecek", stats.todayJobs.length, "blue"],
+              ["Bugün Teslim", stats.todayJobs.length, "blue"],
             ]}
           />
 
@@ -261,7 +297,7 @@ export default function Dashboard({ setActivePage }) {
             onClick={() => go("Teklifler")}
             rows={[
               ["Bekleyen Teklifler", stats.pendingQuotes.length, "blue"],
-              ["Onay Bekleyen Teklifler", stats.approvalQuotes.length, "orange"],
+              ["Onay Bekleyen", stats.approvalQuotes.length, "orange"],
               ["Bu Ay Teklif Tutarı", money(stats.monthQuoteTotal), "gray"],
             ]}
           />
@@ -273,41 +309,14 @@ export default function Dashboard({ setActivePage }) {
             onClick={() => go("Satın Alma")}
             rows={[
               ["Bekleyen Satın Almalar", stats.waitingPurchases.length, "purple"],
-              ["Teslim Alınmayan Siparişler", stats.notReceived.length, "orange"],
+              ["Teslim Alınmayan", stats.notReceived.length, "orange"],
               ["Yaklaşan Vadeler", stats.nearDue.length, "red"],
             ]}
           />
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-7">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-black text-blue-700">İş Takvimi</h2>
-            <div className="flex gap-2">
-              {["Gün", "Hafta", "Ay", "Ajanda"].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setCalendarMode(m)}
-                  className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                    calendarMode === m
-                      ? "bg-blue-600 text-white"
-                      : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <CalendarMock onClick={() => go("İş Takibi")} />
-
-          <div className="mt-4 flex flex-wrap justify-center gap-5 text-xs font-bold text-slate-500">
-            <Legend color="bg-emerald-500" text="Aktif İş" />
-            <Legend color="bg-amber-500" text="Bekleyen İş" />
-            <Legend color="bg-red-500" text="Geciken İş" />
-            <Legend color="bg-blue-500" text="Bugün Teslim" />
-            <Legend color="bg-purple-500" text="Tamamlanan İş" />
-          </div>
+        <div className="xl:col-span-7">
+          <JobCalendar jobs={data.jobs} onOpenJobs={() => go("İş Takibi")} />
         </div>
       </section>
 
@@ -324,7 +333,7 @@ export default function Dashboard({ setActivePage }) {
       </section>
 
       <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <BottomCard title="Son Hareketler" className="xl:col-span-3">
+        <BottomCard title="Son Hareketler" className="xl:col-span-4">
           <div className="space-y-3">
             {(recent.length ? recent : [{ text: "Henüz hareket yok", type: "ERP", page: "Dashboard" }]).map((r, i) => (
               <button key={i} onClick={() => go(r.page)} className="flex w-full items-center gap-3 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-blue-50">
@@ -341,7 +350,7 @@ export default function Dashboard({ setActivePage }) {
           </div>
         </BottomCard>
 
-        <BottomCard title="İş Durumu Özeti" className="xl:col-span-3">
+        <BottomCard title="İş Durumu Özeti" className="xl:col-span-4">
           <button onClick={() => go("İş Takibi")} className="flex w-full items-center justify-center gap-7">
             <div className="flex h-32 w-32 items-center justify-center rounded-full border-[16px] border-emerald-500">
               <div className="text-center">
@@ -353,33 +362,16 @@ export default function Dashboard({ setActivePage }) {
               <SummaryDot color="bg-emerald-500" label="Aktif" value={stats.activeJobs.length} />
               <SummaryDot color="bg-amber-500" label="Bekleyen" value={stats.waitingJobs.length} />
               <SummaryDot color="bg-red-500" label="Geciken" value={stats.delayedJobs.length} />
-              <SummaryDot color="bg-slate-400" label="Tamamlanan" value="0" />
+              <SummaryDot color="bg-blue-500" label="Bugün Teslim" value={stats.todayJobs.length} />
             </div>
           </button>
         </BottomCard>
 
-        <BottomCard title="Finans Durum Grafiği (Bu Ay)" className="xl:col-span-3">
-          <button onClick={() => go("Finans")} className="flex h-44 w-full items-end gap-2">
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="flex flex-1 items-end gap-1">
-                <div className="w-full rounded-t bg-emerald-400" style={{ height: `${25 + ((i * 17) % 90)}px` }} />
-                <div className="w-full rounded-t bg-red-400" style={{ height: `${10 + ((i * 9) % 50)}px` }} />
-              </div>
-            ))}
-          </button>
-        </BottomCard>
-
-        <BottomCard title="Yaklaşan Vadeler" className="xl:col-span-2">
-          <Due onClick={() => go("Finans")} name="ABC Ltd. - Tahsilat" amount="₺75.000" date="10 Temmuz" />
-          <Due onClick={() => go("Finans")} name="XYZ A.Ş. - Ödeme" amount="₺45.000" date="11 Temmuz" />
-          <Due onClick={() => go("Finans")} name="DEF Makina - Ödeme" amount="₺60.000" date="12 Temmuz" />
-        </BottomCard>
-
-        <BottomCard title="Risk & Takip" className="xl:col-span-1">
+        <BottomCard title="Risk & Takip" className="xl:col-span-4">
           <Risk onClick={() => go("İş Takibi")} text="Geciken İşler" value={stats.delayedJobs.length} />
           <Risk onClick={() => go("Finans")} text="Geciken Tahsilatlar" value={stats.overdueReceivables.length} />
           <Risk onClick={() => go("Finans")} text="Geciken Borçlar" value={stats.overduePayables.length} />
-          <Risk onClick={() => go("Satın Alma")} text="Bakım Yaklaşan" value="0" />
+          <Risk onClick={() => go("Satın Alma")} text="Teslim Alınmayan Siparişler" value={stats.notReceived.length} />
         </BottomCard>
       </section>
 
@@ -392,13 +384,19 @@ export default function Dashboard({ setActivePage }) {
 
 function Rate({ label, value, loading }) {
   return (
-    <button className="text-left">
+    <div className="text-left">
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className="font-black">
-        {loading ? "..." : value ? Number(value).toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : "Bağlantı yok"}
+        {loading
+          ? "..."
+          : value
+          ? Number(String(value).replace(",", ".")).toLocaleString("tr-TR", {
+              maximumFractionDigits: 2,
+            })
+          : "Bağlantı yok"}
       </p>
       <p className="text-xs font-bold text-emerald-500">Canlı</p>
-    </button>
+    </div>
   );
 }
 
@@ -442,7 +440,7 @@ function ModuleCard({ title, icon: Icon, rows, button, onClick }) {
 
       <div className="space-y-5">
         {rows.map(([label, value, color]) => (
-          <button key={label} onClick={onClick} className="flex w-full items-center justify-between rounded-xl text-left transition hover:bg-slate-50">
+          <button key={label} onClick={onClick} className="flex w-full items-center justify-between rounded-xl p-1 text-left transition hover:bg-slate-50">
             <div className="flex items-center gap-3">
               <span className={`h-3 w-3 rounded-full ${dot[color]}`} />
               <p className="text-sm font-bold">{label}</p>
@@ -459,39 +457,84 @@ function ModuleCard({ title, icon: Icon, rows, button, onClick }) {
   );
 }
 
-function CalendarMock({ onClick }) {
-  const days = ["Pzt 6", "Sal 7", "Çar 8", "Per 9", "Cum 10", "Cmt 11", "Paz 12"];
-  const jobs = [
-    ["ABC Otomotiv", "08:30 - 11:00", "bg-emerald-100 border-emerald-300", 1, 1],
-    ["XYZ Ltd.", "10:00 - 12:00", "bg-amber-100 border-amber-300", 2, 2],
-    ["DEF Makina", "10:00 - 13:00", "bg-purple-100 border-purple-300", 3, 2],
-    ["GHI Kalıp", "14:00 - 17:30", "bg-red-100 border-red-300", 3, 5],
-    ["JKL Otomotiv", "09:30 - 12:30", "bg-blue-100 border-blue-300", 4, 2],
-    ["MNO Ltd.", "12:30 - 16:30", "bg-emerald-100 border-emerald-300", 5, 4],
-  ];
+function JobCalendar({ jobs = [], onOpenJobs }) {
+  const days = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+
+  const color = {
+    aktif: "bg-emerald-100 border-emerald-300 text-emerald-800",
+    bekliyor: "bg-amber-100 border-amber-300 text-amber-800",
+    gecikti: "bg-red-100 border-red-300 text-red-800",
+    bugün: "bg-blue-100 border-blue-300 text-blue-800",
+    tamam: "bg-purple-100 border-purple-300 text-purple-800",
+  };
+
+  const resolveStatus = (job) => {
+    const date = job.deadline || job.deliveryDate;
+    if (job.status === "Tamamlandı") return ["tamam", "Tamamlandı"];
+    if (job.status === "Bekliyor") return ["bekliyor", "Bekliyor"];
+    if (isPast(date) && job.status !== "Tamamlandı") return ["gecikti", "Gecikti"];
+    if (isToday(date)) return ["bugün", "Bugün Teslim"];
+    return ["aktif", "Aktif"];
+  };
+
+  const visibleJobs = jobs.slice(0, 12);
 
   return (
-    <button onClick={onClick} className="w-full overflow-hidden rounded-2xl border border-slate-200 text-left">
-      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-        {days.map((d) => (
-          <div key={d} className="border-r border-slate-200 p-3 text-center text-xs font-black last:border-r-0">{d}</div>
-        ))}
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-black text-blue-700">İş Takvimi</h2>
+          <p className="text-xs font-semibold text-slate-500">
+            İş durumlarına göre renklenen haftalık üretim takvimi
+          </p>
+        </div>
+
+        <button
+          onClick={onOpenJobs}
+          className="rounded-2xl bg-blue-600 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-700"
+        >
+          İş Takibine Git
+        </button>
       </div>
 
-      <div className="relative grid h-[210px] grid-cols-7 bg-white">
-        {days.map((d) => (
-          <div key={d} className="border-r border-slate-100 last:border-r-0" />
+      <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-slate-200">
+        {days.map((day) => (
+          <div key={day} className="border-r border-slate-200 bg-slate-50 p-3 text-center text-xs font-black last:border-r-0">
+            {day}
+          </div>
         ))}
 
-        {jobs.map(([name, hour, cls, col, row], i) => (
-          <div key={i} className={`absolute rounded-xl border p-2 text-[11px] font-bold ${cls}`} style={{ left: `${((col - 1) / 7) * 100 + 1}%`, top: `${row * 31}px`, width: "12.2%" }}>
-            <p>İş-2026-{1025 + i}</p>
-            <p>{name}</p>
-            <p className="text-slate-500">{hour}</p>
+        {days.map((day, index) => (
+          <div key={day + index} className="min-h-[210px] border-r border-slate-100 bg-white p-2 last:border-r-0">
+            {visibleJobs
+              .filter((_, i) => i % 7 === index)
+              .map((job, i) => {
+                const [statusKey, statusText] = resolveStatus(job);
+
+                return (
+                  <button
+                    key={i}
+                    onClick={onOpenJobs}
+                    className={`mb-2 w-full rounded-xl border p-2 text-left text-[11px] font-bold transition hover:scale-[1.02] ${color[statusKey]}`}
+                  >
+                    <p className="truncate">{job.jobNo || job.id || "İş Kaydı"}</p>
+                    <p className="truncate">{job.customer || job.name || job.jobName || "İş"}</p>
+                    <p className="mt-1 text-[10px] opacity-70">{statusText}</p>
+                  </button>
+                );
+              })}
           </div>
         ))}
       </div>
-    </button>
+
+      <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs font-bold text-slate-500">
+        <Legend color="bg-emerald-500" text="Aktif İş" />
+        <Legend color="bg-amber-500" text="Bekleyen" />
+        <Legend color="bg-red-500" text="Geciken" />
+        <Legend color="bg-blue-500" text="Bugün Teslim" />
+        <Legend color="bg-purple-500" text="Tamamlanan" />
+      </div>
+    </div>
   );
 }
 
@@ -536,18 +579,6 @@ function SummaryDot({ color, label, value }) {
       </div>
       <span className="font-black">{value}</span>
     </div>
-  );
-}
-
-function Due({ name, amount, date, onClick }) {
-  return (
-    <button onClick={onClick} className="mb-3 w-full rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-blue-50">
-      <p className="text-xs font-black">{name}</p>
-      <div className="mt-1 flex justify-between text-xs font-bold text-slate-500">
-        <span>{amount}</span>
-        <span>{date}</span>
-      </div>
-    </button>
   );
 }
 
