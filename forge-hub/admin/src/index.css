@@ -1,0 +1,185 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #f4f6f8;
+  color: #111827;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+}
+
+.sidebar {
+  width: 260px;
+  background: #0f172a;
+  color: white;
+  padding: 28px;
+}
+
+.logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: white;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  margin-bottom: 18px;
+}
+
+.sidebar h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.sidebar p {
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+.main {
+  flex: 1;
+  padding: 30px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.topbar h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.topbar span {
+  color: #64748b;
+}
+
+button {
+  border: 0;
+  background: #111827;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+button:hover {
+  opacity: 0.85;
+}
+
+.card {
+  background: white;
+  border-radius: 22px;
+  padding: 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.card h3 {
+  margin-top: 0;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+}
+
+input,
+select {
+  border: 1px solid #dbe1ea;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+}
+
+.table {
+  width: 100%;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.6fr 0.7fr 0.6fr 0.6fr 2.4fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.row.head {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.row small {
+  display: block;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+code {
+  background: #f1f5f9;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.active {
+  color: #15803d;
+}
+
+.cancelled {
+  color: #b91c1c;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  padding: 8px 10px;
+  font-size: 12px;
+  background: #1f2937;
+}
+
+.empty {
+  padding: 30px;
+  text-align: center;
+  color: #64748b;
+}
+
+@media (max-width: 1100px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 16px;
+    margin-bottom: 12px;
+  }
+}
